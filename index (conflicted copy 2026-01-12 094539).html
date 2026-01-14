@@ -1,0 +1,1267 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>APM_5MV75_TP - MVA (Télécom Paris)</title>
+
+		<link rel="stylesheet" href="css/reset.css">
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/telecom.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/github.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+
+				<section class="cover" data-background="figures/background-blur.png"  data-state="no-title-footer no-progressbar has-dark-background">
+
+					<h2 id='coverh2'>XAI: Variance-Based Analysis</h2>
+					<h1  id='title_seminar'> MVA - APM_5MV75_TP</h1>
+					<h3><a href="https://matfontaine.github.io/APM_5MV75_TP", id='github_url'>matfontaine.github.io/APM_5MV75_TP</a></h3>
+					<p id='coverauthors'>
+						Mathieu FONTAINE<br />
+						mathieu.fontaine@telecom-paris.fr
+					</p>
+					<p id="date">
+					January-March 2025
+					</p>
+					<p>
+					<img src="css/theme/img/logo-Telecom.svg" id="telecom" class="logo" alt="">
+					<aside class="notes">
+						<ul><li>We will consider historical audio source separation technique</li>
+									<li>e.g. no deep learning extensions or nonnegative matrix factorization</li>
+								<li>the Handbook for that course is available on the moodle (PAM/Audio_source_separation)</li>
+						</ul>
+					</aside>
+				</section>
+
+				<!-- Outline of the presentation -->
+				<section>
+					<h1> Outline</h1>
+					<h2>I - What Does “Feature Importance” Really Mean?</h2>
+					<h2>II - Measuring Importance Through Variance</h2>
+					<h2>III – Sobol Decomposition: Theory and Interpretation $\texttt{[Sob. 01]}$</h2>
+					<h2>IV – Local Feature Importance via Perturbations $\texttt{[Fel. 21]}$</h2>
+					<h2>IV - Sobol Indices in Practice</h2>
+					<h2>V - What Sobol Explains (and What It Does Not)</h2>
+					<h2>VI - Take-Home Message</h2>
+
+				</section>
+
+
+
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id='coverh2'>I - What Does "Feature Importance" Really Mean ?</h2>
+
+				</section>
+
+				<section>
+					<h1>Not really mathematic...</h1>
+					<ul>
+						<li>Consider $f:\mathbb{R}^d \to \mathbb{R}$ (e.g. classification problem)</li>
+						<li>					The general definition is 
+					<p><b><center>
+						A feature is important if changing it changes the prediction
+</b></center></p>
+				</li>
+					</ul>
+					<br>The main problem is then
+					<div class="remarque">
+						Changing it how ?
+					</div>
+					<br>
+					This is what distinguish various XAI methods:<br>
+					<ul>
+						<li>gradients analysis</li>
+						<li>occlusion</li>
+						<li>SHAP</li>
+						<li>Sobol</li>
+					</ul>
+				</section>
+				<section>
+					<h1>Example 1: Linear Model</h1>
+					<ul>
+						<li>Consider $f(x_1, x_2) = 3x_1 + 0.1x_2$</li>
+						<li>$x_1$ as more impact than $x_2$</li>
+						<li>Importance = coefficient amplitude</li>
+						<li>We have a <b>global importance</b></li>
+					</ul>
+				</section>
+				<section>
+					<h1>Example 2: Gradient</h1>
+					<ul>
+						<li>Consider $f(x_1, x_2) = x_1^2 + x_2$</li>
+						<li>The gradient is $[\nabla f(x)_1, \nabla f(x)_2] = (2x_1, 1)$</li>
+						<li>for $x=(0,1)$  $\nabla f(x)_2$ is more important than $\nabla f(x)_2$ </li>
+						<li>we have a <b>local importance</b></li>
+						<li>such importance depend on the local metric</li>
+					</ul>
+				</section>
+				<section>
+					<h1>Example 3: Occlusion</h1>
+					Occlusion = remove some entry information and check what the model is doing
+					<ul>
+						<li>In image: hide a patch</li>
+						<li>In audio: Cut some frequencies</li>
+						<li>In text: delete a word</li>
+						<li>The prediction is compared before and after the occlusion</li>
+					</ul>
+					<br>Let consider the function $f(x_1, x_2) = x_1 \times x_2$ and the entry $(x_1, x_2) = (1,1)$ then $f(1,1) = 1$
+				 If we remove $x_1$ (i.e. $x_1=0$) then we get $f(0,1) = 0$ same if we remove $x_0$.
+
+				 Intuitive conclusion: Both variables are important
+				 					<div class="remarque">
+						Both are important individually, jointly ? 
+					</div>
+				</section>
+				<section>
+				<h1>Hidden Interaction (Sobol Motivation)</h1>
+				In $f(x_1, x_2) = x_1x_2$, $x_1$ or $x_2$ or not so important alone. The importance comes from their interaction 
+					<div class="remarque">
+						How can we separate what comes from individual effects and what comes from interactions?
+					</div>
+			</section>
+			<section>
+				<h1>Feature importance (in this course)</h1>
+				<div class="affirmation">
+					Feature importance:  measure how much the prediction varies when a given feature is allowed to vary, possibly jointly with others.
+				<p>
+					<b>Sobol:</b> the only one that provides an exact and additive decomposition of variance into main effects and interactions.
+				</p>
+				</div>
+			</section>
+				<section>
+					<h1>Introduction (Reminder) (1/2)</h1>
+					Let $\Omega$ be a set. 
+					<div class="exemple"> 
+						<div id="title"> Definition [$\sigma$-algebra] </div> 
+						A subset collection of $\Omega$ denoted $\mathcal{F}$ is a  <b>$\sigma$-algebra</b> if :</br> 
+						<ol style="margin-right:-4em;">
+						<li><span style="margin-left:-3em;">$\emptyset \in \mathcal{F}$</span></li>
+					<li><span style="margin-left:-3em;">$A \in \mathcal{F} \implies A^{\mathsf{c}} \in \mathcal{F}$</span></li>
+					<li><span style="margin-left:-3em;">$A_1, A_2,\dots \in \mathcal{F} \text{ dénombrable} \Rightarrow  \bigcup_i A_i \in \mathcal{F}$</span></li>
+					 </ol>
+					</div>
+						<p style="margin-top:0.5em;">
+						<b>Remark : </b>
+						<ul>
+						<li>$(F \cap \mathcal{F}$) is a $\sigma$-algebra. $\sigma(F)$ is the intersection of all the $\sigma$-algebra containing $F$.</li>
+						<li>One example is the <b>Borel $\sigma$-algebra</b> which is $\mathcal{B}(\mathbb{R}^d) = \sigma \left(\prod_{i=1}^d[a_i, b_i]\right)$</li>
+						<li>$\{a\},~]a,b[,~]-\infty, b] \in \mathcal{B}(\mathbb{R})$; $(\Omega, \mathcal{F})$ is a mesurable / probabilisable set</li>
+						<li>We will usually consider $(\mathbb{R}, \mathcal{B}(\mathbb{R}))$ in our case</li>
+						<li>if $X: (E,\mathcal{E}) \to (\mathbb{R}, \mathcal{B}(\mathbb{R}))$ satisfies $\forall G \in \mathcal{G}, X^{-1}(H) \in \mathcal{B}(\mathbb{R})$ 
+							we say that $X$ is a random variable on $\mathbb{R}$ </li>
+					</ul> 
+						
+					</p>
+
+					<!-- Let $(\Omega, \mathcal{F}, \mathbb{P})$ a probability space, $T$ an index set and $(X,\mathcal{X})$ a measurable space (observation space)
+					Most of the time, $(X \mathcal{X})$ will be $(\mathbb{R}, \mathcal{B}(\mathbb{R})$)
+					<div class="exemple"> 
+					<div id="title"> Definition [Random Process] </div> 
+					Soit $(u_n)_n$ un suite dans $\mathbb{Q}$. On dit alors que $u_n \to l$ si:
+							<center>$$
+							\forall \epsilon > 0, \exists N \in \mathbb{N}, \forall n \geq N,~ |u_n -l| \leq \epsilon
+							$$</center>
+					On dit que $u_n$ est une <b> suite de Cauchy </b> si:
+
+									<center>$$
+							\forall \epsilon > 0, \exists N \in \mathbb{N}, \forall n \geq N,~ |u_n -u_N| \leq \epsilon
+							$$</center>
+					ou de manière équivalente:
+					<center>$$
+						\forall \epsilon > 0, \exists N \in \mathbb{N}, \forall n,m \geq N,~ |u_m -u_n| \leq \epsilon
+						$$</center>
+					</div>				 -->
+				</section>
+
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id='coverh2'>II - Measuring Importance Through Variance</h2>
+				</section>
+
+
+				<section>
+					<h1>Introduction (Reminder) (2/2)</h1>
+					Let $(\Omega, \mathcal{F})$ a measurable set. 
+					<div class="exemple"> 
+						<div id="title"> Definition [measure, Probability mesure and Probability space] </div> 
+						A function $\mathbb{P} : \mathcal{F} \to [0,+\infty]$ is a mesure on $(\Omega, \mathcal{F})$ if  :</br> 
+						<ol style="margin-right:-4em;">
+						<li><span style="margin-left:-3em;">$\mathbb{P}(\emptyset) = 0$</span></li>
+					<li><span style="margin-left:-3em;">$\forall A_1, A_2, \dots \in \mathcal{F}$ 2 à 2 disjoints, $\mathbb{P}(\bigcup_{i} A_i) = \sum _{i} \mathbb{P}(A_i) \quad (\sigma-\texttt{additivity})$</span></li>
+					<li><span style="margin-left:-3em;">$\mathbb{P}(\Omega) =1 \implies \mu \quad \texttt{(probability mesure)}$</li>
+					<li><span style="margin-left:-3em;">$(\Omega, \mathcal{F}, \mathbb{P})$ is called a <b>Probability space</b>.</span></li>
+					 </ol>
+					</div>
+						<p style="margin-top:0.5em;">
+						<b>Example : </b>
+						<ul>
+						
+						<li>On $(\mathbb{R}, \mathcal{B}(\mathbb{R})), \lambda([a,b]) = b-a$ is the Lebesgue measure</li>
+						<li>If we define $\mathcal{F}_1 \otimes \mathcal{F}_2 = \sigma(\{\prod_{i=1}^2A_i, A_1 \in \mathcal{F}_1, A_2 \in \mathcal{F}_2\})$,
+							 we can then define a product measure $\mathbb{P}_1 \otimes \mathbb{P}_2$ on it with $($</li>
+						<li>if $X: (F, \mathcal{F}) \to (\mathbb{R}, \mathcal{B}(\mathbb{R}))$ is a r.v., then $\mathbb{P}^X := \mathbb{P} \circ X^{-1}$which is $\forall H \in \mathcal{F}, \mathbb{P}^X(H) = \mathbb{P}(X \in H)$ is a measure called the <b>probability law of $X$</b></li>
+					</ul> 
+						
+					</p>
+
+					<!-- Let $(\Omega, \mathcal{F}, \mathbb{P})$ a probability space, $T$ an index set and $(X,\mathcal{X})$ a measurable space (observation space)
+					Most of the time, $(X \mathcal{X})$ will be $(\mathbb{R}, \mathcal{B}(\mathbb{R})$)
+					<div class="exemple"> 
+					<div id="title"> Definition [Random Process] </div> 
+					Soit $(u_n)_n$ un suite dans $\mathbb{Q}$. On dit alors que $u_n \to l$ si:
+							<center>$$
+							\forall \epsilon > 0, \exists N \in \mathbb{N}, \forall n \geq N,~ |u_n -l| \leq \epsilon
+							$$</center>
+					On dit que $u_n$ est une <b> suite de Cauchy </b> si:
+
+									<center>$$
+							\forall \epsilon > 0, \exists N \in \mathbb{N}, \forall n \geq N,~ |u_n -u_N| \leq \epsilon
+							$$</center>
+					ou de manière équivalente:
+					<center>$$
+						\forall \epsilon > 0, \exists N \in \mathbb{N}, \forall n,m \geq N,~ |u_m -u_n| \leq \epsilon
+						$$</center>
+					</div>				 -->
+				</section>
+
+
+
+				<section>
+					<h1>Random process</h1>
+
+					Let $(\Omega, \mathcal{F}, \mathbb{P})$ a probability space, $T$ an index set and $(X,\mathcal{X})$ a measurable space (observation space)
+					Most of the time, $(X, \mathcal{X})$ will be $(\mathbb{R}, \mathcal{B}(\mathbb{R})$)
+					<div class="exemple"> 
+					<div id="title"> Definition [Random Process] </div> 
+					A random process defined on $(\Omega, \mathcal{F}, \mathbb{P})$, indexed on $T$ and valued in $(X, \mathcal{X})$ is a collection $(X_t)_{t \in T}$ 
+					of random variables defined on $(\Omega, \mathcal{F}, \mathbb{P})$ and taking there values in $(X, \mathcal{X})$.
+					</div>
+					<ul style="margin-top:0.8em;">
+						<li>If $T=\mathbb{N}, \mathbb{Z}$; $(X_t)_{t\in \mathbb{T}}$ is a <em>discrete time</em> process</li>
+						<li>If $T = \mathbb{R}, \mathbb{R}_+$; it is a <em>continuous time</em> process</li>
+						<li>If $(X, \mathcal{X}) = (\mathbb{R}, \mathcal{B}(\mathbb{R}))$, we then talk about a <em>real valued time</em> process</li>
+						<li>We can see a r.p. as follow:
+							$
+							X: \Omega \times T \to X, (\omega, t)\mapsto X_t(\omega)$ such that $\omega \mapsto X_t(\omega)$ is measurable from $(\Omega, \mathcal{F})$ to $(X, \mathcal{X})$
+							
+						</li>
+						<div class="remarque">
+							The aplication $t \mapsto X_t(\omega)$ is called the path associated to $\omega$
+						</div>
+					</ul>
+				</section>
+				<section>
+					<h1>Finite dimensional distributions</h1>
+					For random process, the law of a random process can be caracterized by the law of all finite dimensional distributions.
+					<br>
+					<ul>
+						<li>$\forall I \subset T$ finite,
+							 $\forall \prod_{i\in I}A_i \in \bigotimes_{i\in I}\mathcal{X}_i, \mathbb{P}^X \circ \Pi_{I}^{-1} = \mathbb{P}_{I}$
+							<br>
+							$\quad\rightarrow \Pi_{I}(x) = (x_t)_{i\in I}
+							$
+							
+							</li>
+					</ul>
+					<p><b>Example</b> (hereafter $X_t \sim \nu_t$ means the probability law of $X_t$ is $\nu_t$):
+					<ul>
+						<li>$(X_t)$ is an independent process if $(X_t)$ are independent variables.</li>
+						<li>If it is ind and admits marginals $(\nu_t)_{t\in T}$ then $X_t \sim \nu_t$. Then we have for all finite subset $I$, $\nu_I = \bigotimes_{i \in I} \nu_i$</li>
+						<li>$(X_t)$ is iid if moreover $\nu_t$ is the same for all $t$</li>
+					</ul>
+					</p>
+				</section>
+
+				<section>
+					<h1>Gaussian vector (recall)</h1>
+					<ul>
+						<li>Recall that $X = [X_1, \dots, X_n]$ is a gaussian vector if any Linear combination of the component are gaussian variable</li>
+						<li>such distribution is characterized by a mean $\mu$ and a covariance $\Sigma$</li>
+						<li>$\mu = \mathbb{E}[X_1, \dots, X_n]$ and $\Gamma_{ij} = \mathbb{E}[(X_i - \mu_i)(X_j - \mu_j)]=\mathrm{Cov}(X_i, X_j)$</li>
+						<li> We denote then $X \sim \mathcal{N}(\mu, \Gamma)$</li>
+						<li>if only $\mathrm{Cov}(X_i, X_i) \neq 0$, then the components of $X$ are independents</li>
+					
+					</ul>
+				</section>
+
+				<section>
+					<h1>Gaussian process</h1>
+					<div class="exemple"> 
+					<div id="title"> Definition [Gaussian Process] </div> 
+					A real-valued r.p. $(X_t)$ is called a gaussian process (GP) if for all $I=[t_1, \dots, t_n], [X_{t_1}, \dots, X_{t_n}]^\top$ 
+					is a Gaussian vector.
+					</div>
+
+					It can be then shown that a GP can be simply characterized
+
+					<div class="exemple"> 
+					<div id="title">Theorem </div> 
+					Let $\mu, \gamma$ defined respectively on $T, T\times T$ such that $\Gamma_I$ are all nonnegative symmetric matrices (for $I \subset T$ finite).
+					Then we can define a GP $(X_t)$ verifying for all $s,t \in T$: $\mu(t)=\mathbb{E}[X_t], \gamma(s,t) = \mathbb{E}[(X_s-\mu(s))(X_t-\mu(t))]$
+					</div>
+					Consequently, we denote $\mathcal{N}(\mu, \gamma)$ a GP
+				</section>
+				<section>
+					<h1>Filtering</h1>
+				The filtering of process is a nice way to reason on laws of trajectories, useful to extract characteristics of them.
+
+				<div class="exemple"> 
+					<div id="title"> Definition [filtering] </div> 
+					A filtering with input $X$ and output $Y$ means that $Y = \phi \circ X$  or in other words $Y_t = \prod_{\{t\}}(\phi(X)) = \phi(x)_t$ for all $t$ 
+					</div>
+
+			    <p><b>Examples:</b>
+				<ul>
+					<li>(Shift operator) if we define $\phi=S$ as a shift operator, then $Y_t = X_{t+1}$</li>
+					<li>(Finite impulse response filter) if we define $\phi = \sum \alpha_i S^{-t_i}$ then $Y_t = \sum_{i=1}^{n}\alpha_i X_{t-t_i}$</li>
+					<li>(shift invariant filter) it verifies $\phi \circ S = S \circ \phi \\$
+						$\quad \rightarrow$ $Y_t = g(X_t, \dots, X_{t-k+1})$ with $g$ mesurable. Then $Y = \phi \circ X$ with
+						$\phi((x_t)_t) = (g(x_t, \dots, x_{t-k+1})_t)$. It can be shown that $(S\phi(X))_t = (\phi(SX))_t$
+
+					</li>
+				</ul>
+				</p>	
+				</section>
+
+				<section>
+					<h1>Strict stationarity</h1>
+					In this course, we will see the (strict) stationnarity and weakly (aka wide sense) stationnarity of random process.
+					<div class="exemple"> 
+					<div id="title"> Definition [Strict Stationarity] </div> 
+					A process (X_t)_t is <b>strictly stationnary</b> if $X$ and $S \circ X$ have the same law. We can also say iff for all finite dimension distribution.
+					Even further $\mathbb{P}_{I} = \mathbb{P}_{I+1}$ is enough ! 
+					</div>
+					<p><b>Examples:</b>
+					<ul>
+						<li>an i.i.d process $\mathbb{P}(Z_{t_1} \in A_1, \dots, Z_{t_n} \in A_n) = \mathbb{P}(Z_{t_1 + 1} \in A_1, \dots, Z_{t_n + 1} \in A_n) = \prod_j\mathbb{P}(Z_0 \in \mathbb{A_j})$</li>
+						<li>if $Z$ is i.i.d., then $X_t = g(Z_t, \dots , Z_{t-k+1})$ is also i.i.d.</li>
+					</ul>
+					</p>
+				</section>
+
+				<section>
+					<h1>L^2 processes</h1>
+					This assumption is weaker but useful in practice and admits nice results. We first define the $L^2$ process on the Hilbert space 
+					$L^2(\Omega, \mathcal{F}, \mathbb{P})$ (meaning that $\mathbb{E}[|X|^2] < \infty$)
+
+					<div class="exemple"> 
+						<div id="title"> Definition [L^2 process] </div> 
+						$X$ is an L^2 process if $X_t \in L^2(\Omega, \mathcal{F}, \mathbb{P})$ for all $t$. We can define a mean function 
+						$\mu(t) = \mathbb{E}[X_t]$ and $\Gamma(s,t) = \mathrm{Cov}(X_s, X_t) = \mathbb{E}[(X_s - \mu(s))(X_t - \mu(t))^\top]$
+					</div>
+
+					<p><b>Remarks:</b>
+					<ul>
+						<li>Be careful ! $X_s$ can be a $d$ vector ($\mathrm{Cov}(X_s, X_t) = \mathrm{Cov}(X_s^{l}, X_s^{l^\prime})_{l,l^\prime}$) </li>
+						<li>$\Gamma(s,t) = \Gamma(t,s)^\top$ (hermitian transposition in the complex case)</li>
+						<li>$\sum_{1 \leq k,m\leq n} a_k^H \Gamma(t_k,t_m)a_m \geq 0$ (non negativity)</li>
+						<li>$\mathrm{Cov}(AU,BV) = A\mathrm{Cov}(U, V) B^{H}$</li>
+						<li></li>
+					</ul>
+					</p>
+
+				</section>
+
+				<section>
+					<h1>Weakly stationnary process</h1>
+					<div class="exemple"> 
+						<div id="title"> Definition [$L^2$ process] </div> 
+						if $X$ is an $L^2$ process, $\mathbb{E}[X_t] = \mu$ and $\mathrm{Cov}(X_s, X_t) = \Gamma(s-t)$ then $X$ is said to be weakly stationnary.
+					</div>
+					<p><b>Remarks</b>:
+					<ul>
+						<li>the strict stationnarity in the L^2 case implies the weak stationarity. </li>
+						<li>$(X_t)$ is w.s. with $(\mu, \Gamma)$ iff. all projections $\lambda^H X_t$ have mean $\lambda^H\mu$ and autocovariance $\lambda^H\Gamma \lambda$</li>
+						<li>We can thus restrict our study to $d=1$ without loss of generality</li>
+					</ul>
+					</p>
+				</section>
+				<section>
+					<h1>Autocovariance and Autocorrelation Function</h1>
+					$\gamma : \mathbb{Z} \to \mathbb{C}$ an AF of a weakly stationary process verifies:
+					<ul>
+						<li>$\gamma(-s) = \bar{\gamma}(s)$</li>
+						<li>$ \sum_{s,t=1}^{n}\bar{a_s}\gamma(s-t)a_t \geq 0$</li>
+						<li>$(\Gamma_n)_{ij}=\gamma(i-j)$ of $n$ consecutive samples is a Toeplitz matrix (cf poly).</li>
+					</ul>
+					We also define the "normalized autocovariance function" or autocorellation as $\rho(t) = \gamma(t) / \gamma(0)$
+				</section>
+
+				<section>
+					<h1>Examples of weak stationnary and autocovariance function</h1>
+					<ul>
+						<li>(Weak white noise): $X_t$ with $\mathbb{E}[X](t) = \mu, \gamma(t) = \sigma^2 \delta_{0}(t)$
+							if entries are i.i.d, it is a strong white noise
+
+						</li>
+						<li>
+							(MA(1)): compute $\mathbb{E}[X_{t+h}X_{t}]$ with $X_t=Z_t + \theta Z_{t+1}$ and $\mathbb{E}[X_{t}]=0$
+							you get $\gamma(t) = \sigma^2(1+\theta^2)\delta_0(t) + \sigma^2\theta \delta_{\{-1,1\}}(t)$
+						</li>
+					</ul>
+
+					<div class="remarque" style="margin-top:0.5em;">
+						In practice, how to compute it if we have realizations of such random process ?
+					</div>
+				</section>
+				<section>
+					<h1>Empirical estimation of the mean and the autocovariance function</h1>
+					Simple way, if we have samples $(X_t)_{t=1}^{N}$ then the empirical mean and autocovaiance are defined as:
+					$$
+					\hat{\mu}_N=\frac{1}{N}\sum_{k=1}^{N}X_k; \hat{\gamma}_{N}(t) = \frac{1}{N}\sum_{k=1}^{N-|t|}(X_k-\hat{\mu}(n))(X_{k+ |t|}-\hat{\mu}(n))
+					$$
+				</section>
+					<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id='coverh2'>II - Spectral measure & innovation process (introduction)</h2>
+
+				</section>
+
+				<section>
+					<h1>Autocovariance</h1>
+					<div class="affirmation" style="margin-bottom:1em;">
+						Given a function $\gamma:\mathbb{Z} \to \mathbb{C}$, how to characterize an autocovariance function ?
+					</div>
+					<ul>
+						<li>if $\gamma$ is an autocovariance function then it is non negative $\mathrm{Var}(\sum_{m}a_m X_{t_m}) = \sum_{k,j} \bar{a}_j\mathrm{Cov}(X_{t_k}, X_{t_j}) a_k \geq 0 $</li>
+						<li>It is also Hermitian (due to dot product property)</li>
+					</ul>
+					<div class="affirmation" style="margin-top:1em;">
+					What about its Fourier Transform ? (aka spectral representation)
+					</div>
+				</section>	
+
+				<section>
+					<h1>Hertglotz Theorem</h1>
+						<div class="exemple"> 
+						<div id="title"> Theorem [Hertglotz Theorem] </div> 
+						$\gamma: \mathbb{Z} \to \mathbb{C}$ is nonnegative definite hermitian iff thre exists a finite nonnegative measure 
+						$\nu$ on $(\mathbb{T}, \mathcal{B}(\mathbb{T})$ such that : 
+						<center>
+						$$
+						\gamma(h) = \int_{\mathbb{T}} e^{ih\lambda} \nu(d\lambda)
+						$$
+						</center>
+
+						$\nu$ is moreover unique and is called the <b>spectral measure</b>.
+						<p><b>Proof:</b> only one sense</p>
+					</div>
+
+									<ul>
+					<li>if $\nu(d\lambda) = f(\lambda) d\lambda$ we call $ \lambda \to f(\lambda)$ the <b>spectral density</b></li>
+				    <li>If moreover $\gamma \in \ell^1({\mathbb{Z}})$  then $f(\lambda) = \frac{1}{2\pi} \sum_{h \in \mathbb{Z}}\gamma(h) e^{-ih\lambda} \geq 0$</li>
+				</ul>
+				</section>
+				<section>
+					<h1>Examples</h1>
+					<ul>
+						<li>(Gaussian White Noise)
+							 we consider
+							 $Z_t \overset{\text{i.i.d.}}{\sim} \mathcal{N}(0,\sigma^2)$.
+							Then, $\gamma(h) = \sigma^2\delta_{0}(h) \in \ell^{1}$ and we can compute 
+							$f(\lambda) = \frac{1}{2\pi}\sum_{h \in \mathbb{Z}}\sigma^2 \delta_0(h) = \frac{\sigma^2}{2\pi}
+							\\ \quad \rightarrow$ the energy is the same for all frequencies
+						
+
+							</li>
+							<li>(MA(1)) we already show that $\gamma(h) = (1+\theta^2)\sigma^2 \delta_0(h) + \sigma^2\theta\delta_{\{-1,1\}}(h) \in \ell^1$ then : 
+								<center>
+								$$
+								f(\lambda) =  \frac{\sigma^2}{2\pi}(1+\theta^2 + \sigma^2\theta (e^{-i\lambda} + e^{i\lambda}))
+								= \frac{\sigma^2}{2\pi} (1 + \theta e^{-i\lambda})(1 + \theta e^{i\lambda})
+								$$
+								$= \frac{\sigma^2}{2\pi} |1+ \theta e^{-i\lambda}|^2 \geq 0$
+								$\\ \quad \rightarrow$ if we draw for  $\theta \leq 0$ then it has more energy in the high frequency
+								$\\ \quad \rightarrow$ for $\theta \geq 0$ it has more energy in the low frequency
+								</center>
+							</li>
+							<li>
+								(Harmonic Process) We consider $X_t = A \cos(\omega t + \Phi)$ where $A \perp \Phi$ and $\Phi \sim \mathcal{U}([0,2\pi[)$. Then, we get that (Practice session)
+								$\gamma(h) = \frac{1}{2}\mathbb{E}[A^2]\cos(\omega h)$. Here the function is not $\ell^1$ so we cannot talk about $f(\lambda)$. However, it is easy to see that:
+								$$
+								\gamma(h) =\int_{0}^{2\pi} \frac{1}{4}\mathbb{E}[A^2] e^{ih\lambda} \delta_{\pm \omega}(d\lambda)  
+								 = \int_{0}^{2\pi}e^{ih\lambda}\nu(d\lambda)
+								$$
+								Then by identification, we get $\nu(d\lambda) = \frac{1}{4}\mathbb{E}[A^2]\delta_{\pm \omega} (d\lambda)$
+							</li>
+					</ul>
+				</section>
+				<section>
+					<h1>Linearly predictable</h1>
+					If we write the covariance matrix of the harmonic process then:
+					$$
+					\Gamma_n = \frac{\mathbb{E}[A^2]}{2} (\underbrace{\cos(\omega(i-j))}_{=\cos(a)cos(b) + sin(a)sin(b)})_{1\leq i,j \leq n} 
+					 = \frac{\mathbb{E}[A^2]}{2}(cc^\top +ss^\top)
+					$$
+
+					with $c=[\cos(\omega), \dots, \cos(n\omega)]^\top, s = [\sin(\omega), \dots, \sin(n\omega)]^\top$
+					<ul>
+						<li>The matrix $\Gamma_n$ is not invertible if $n >2 \implies$ it is linearly predictable (ex 4.4)</li>
+					</ul>
+
+					<div class="exemple"> 
+						<div id="title"> Definition [Linearly Predictable] </div> 
+						A w.s. $(X)$ is linearly predictable if there is $n \geq 1, \forall t \geq n, X_t \in \mathrm{Span}(X_1, \dots, X_n)$
+					</div>
+
+					Another nice result (deduced from 4.4. and which shows that MA(1) and white noise are not linearly predictable)
+					is a caracterization of not linearly predictable process.
+					<div class="exemple"> 
+						<div id="title"> Prop </div> 
+					If $\gamma$ is the autocovariance function of a w.s. X and if $\gamma(0) \neq 0$ and $\gamma(t) \underset{t\in \infty}{\rightarrow} 0$
+				then $X$ is not linearly predictable.
+				</div>
+				<div class="remarque">
+					How can we "quantize" the error generated by a linear predictor ?
+				</div>
+				</section>
+				<section>
+					<h1>Reminder on Hilbert Space</h1>
+					We consider real values scalar processes of dimension $1$ (for simplicity).
+					Let's $ 
+					\\\mathcal{H} = (L^2(\Omega, \mathcal{F}, \mathbb{P}), < X,Y >)$ where $< X, Y > = \mathbb{E}[XY]$ and $ \Vert X \Vert  = \sqrt{< X, X >}$
+					
+					<div class="exemple"> 
+						<div id="title"> Theorem [Orthogonal Projection in an Hilbert Space] </div> 
+					Let $\mathcal{M} \subset \mathcal{H}$ be a closed subspace. $\forall Y \in \mathcal{H}, \exists ! Y^{\star} \in \mathcal{M}$ such that : 
+					<ol>
+						 <li>$\Vert Y - Y^{\star}\Vert = \underset{Z \in \mathcal{M}}{\min} \Vert Y - Z \Vert$ </li>
+						 <li>$Y - Y^\star \perp \mathcal{M}$ meaning $\forall Z \in \mathcal{M}, \mathbb{E}[(Y-Y^\star)Z] = 0$</li>
+						<li>We note $Y^\star = \mathrm{proj}(Y \mid \mathcal{M})$</li>
+						</ol>
+				</div>
+				What comes out also is that $\mathcal{H} = \mathcal{M} \overset{\perp}{\oplus} \mathcal{M}^{\perp}$
+			     In our case, given a random process $(X_t)_t$, we can consider either: 
+						<ul>
+							<li>A finie dimensional projection space: 
+								$\mathcal{M} = \mathcal{H}_{t,p}^{X} \triangleq
+								 \mathrm{Span}(X_s, t-p \leq s \leq t)$ Note that a finite vectorial space is closed</li>
+							<li>An infinite dimensional projection space $\mathcal{M} = \mathcal{H}_{t}^{X} 
+								\triangleq
+								 \overline{\mathrm{Span}}(X_s, t-p \leq s \leq t)$</li>
+						</ul>
+										<div class="remarque">
+					With $\mathcal{M} = \mathcal{H}_{t}^{X}$, the part in $\mathcal{M}^{\perp}$ is called the "innovation process"
+				</div>
+				</section>
+				<section>
+					<h1>Innovation Process</h1>
+					<div class="exemple"> 
+						<div id="title"> Definition [Innovation Process] </div> 
+						Let $(X_t)_t$ being a centered w.s. process. The <b>innovation process</b> is defined as 
+						<center>
+						$$
+						\epsilon_t = X_t - \mathrm{proj}(X_t \mid \mathcal{H}_{t-1}^{X})
+						$$
+						</center>
+						by the orthogonal principle in $L^2$ we have that $X_t-\epsilon_{t} \in \mathcal{H}_{t-1}^X$ and $\epsilon_t \perp \mathcal{H}_{t-1}^{X}$
+					</div>
+					We also have the following property (cf. in the handbook for the demo)
+
+					<div class="exemple"> 
+						<div id="title"> Property </div> 
+						The innovation process of a centered w.s. process $X$ is a weak white noise. We call its variance the <b>innovation variance of $X$</b>
+					</div>
+				</section>
+				<section>
+					<h1>Examples</h1>
+					<ul>
+						<li>The innovation process of a white noise $X \sim WN(0, \sigma^2)$ is $\epsilon = X$
+							Indeed, $\epsilon_t \perp \mathcal{H}_{t-1}^{X}$ is true for $\epsilon_t = X_t$ and $X_t - X_t = 0 \in \mathcal{H}_{t-1}^{X}$
+						</li>
+						<li>Consider a MA(1) $X_t = Z_t + \theta Z_{t-1}$ where $Z \sim WN(0, \sigma^2)$. Show first that $Z_t \perp H_{t-1}^{X}$
+							To get $\epsilon_t = Z_t$, what condition should we consider ?
+						</li>
+					</ul>
+				</section>
+					<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id='coverh2'>III - Linear Filtering</h2>
+				</section>
+				<section>
+					<h1>Motivations</h1>
+					Let's recall the backshift operator: 
+						<center>$$
+						B	:\begin{array}{ccc}
+\mathbb{C}^{\mathbb{Z}} & \to & \mathbb{C}^{\mathbb{Z}}\\
+\left(X_{t}\right)_{t\in\mathbb{Z}} & \mapsto & \left(X_{t-1}\right)_{t\in\mathbb{Z}}
+\end{array}$$</center>
+				The goal of today is: <br>
+				<ul>
+					<li>talk about linear filtering $Y=(\sum_{k \in \mathbb{Z}}\alpha_kB^k)(X) :=F_{\alpha}(X)$</li>
+					<li>When does the sum exists ? </li>
+					<li>For w.s., how the mean and covariance looks like ? And specifically for a white noise ?</li>
+					<li>What about inverse filtering ? $(X =F_\beta(Y))$</li>
+				</ul>
+				</section>
+				<section>
+					<h1>Preservation for w.s processes (1/3)</h1>
+					Consider $\alpha \in \ell_C(\mathbb{Z}) = \{(\alpha_k)_k \in \mathbb{C}^{\mathbb{Z}} \mid \sharp\{k: \alpha \neq 0\} < \infty\}$
+					and $Y=\sum_{k\in\mathbb{Z}}\alpha_{k}B^{k}X$ (i.e. $\forall t\in\mathbb{Z},Y_{t}=\sum_{k\in\mathbb{Z}}\alpha_{k}X_{t-k}\in L^{2}$)
+					<ul>
+						<li>First that if $X$ is w.s. with mean $\mu_X$ then $BX$ has the same mean as $X, (\mathbb{E}\left(X_{t}\right)=\mu_{X}=\mathbb{E}\left((B\circ X)_{t}\right),\,\forall t\in\mathbb{Z})$
+
+						</li>
+						<li>Same for covariance $\mathrm{Cov}\left(\left(B\circ X\right)_{t+h},\left(B\circ X\right)_{t}\right)=\mathrm{Cov}\left(X_{t+h-1},X_{t-1}\right)=\gamma\left(h\right)=\mathrm{Cov}\left(X_{t+h},X_{t}\right)$</li>
+					</ul>
+										<div class="remarque">
+						We get a w.s. 
+					</div>
+				</section>
+				<section>
+					<h1>Preservation for w.s processes (2/3)</h1>
+					Now in the general case for $X$ w.s. with mean and autocovariance $\mu_X, \gamma$ resp.: 
+					<ul>
+						<li>$\forall t\in\mathbb{Z},\mathbb{E}\left[Y_{t}\right]=\sum_{k\in\mathbb{Z}}\alpha_{k}\mathbb{E}\left[X_{t-k}\right]=\left(\sum_{k\in\mathbb{Z}}\alpha_{k}\right)\mu_{X}$
+							(and $\alpha\in\ell_{C}\left(\mathbb{Z}\right)$ so the mean is well-defined and does not depends on $t$)
+						</li>
+						<li>
+							$\forall t,h \in \mathbb{Z},$
+							$\begin{aligned}
+							\mathrm{Cov}\left(Y_{t+h},Y_{t}\right)
+							&=\sum_{k\in\mathbb{Z}}\sum_{k^{\prime}\in\mathbb{Z}}\alpha_{k}\overline{\alpha_{k^{\prime}}}
+							\mathrm{Cov}\left(X_{t+h-k},X_{t-k^{\prime}}\right) \\
+	&=\sum_{k\in\mathbb{Z}}\sum_{k^{\prime}\in\mathbb{Z}}\alpha_{k}\overline{\alpha_{k^{\prime}}}
+	\gamma\left(t+h-k-(t-k^{\prime})\right)\\
+	&=\sum_{k\in\mathbb{Z}}\sum_{k^{\prime}\in\mathbb{Z}}\alpha_{k}\overline{\alpha_{k^{\prime}}}
+	\gamma\left(h+k^{\prime}-k\right)
+							\end{aligned}$
+						</li>
+						<li>The covariance does not depends on $t$ so $Y$ is a w.s. </li>
+					</ul>
+					<div class="remarque">
+						We get in any case a w.s., what about if $\alpha \in \ell^1(\mathbb{Z})$ ?
+					</div>
+				</section>
+				<section>
+					<h1>Preservation for w.s processes (3/3)</h1>
+					We have the following Lemma 
+					<div class="exemple"> 
+						<div id="title"> Lemma </div> 
+						If $\alpha \in \ell^1(\mathbb{Z})$ and $(Z_k)$ is a sequence of $\mathbb{C}$-valued random variables such that $\sup_k \mathbb{E}[|Z_k|^2] < \infty$
+						Then $\sum_{k\in \mathbb{Z}}\alpha_kZ_k$ is well defined a.s., in $L^2$ and the limits are the same a.s 
+						$Z_n \overset{a.s.}{\to} Z$ and $Z_n \overset{L^2}{\to}Z$
+					</div>
+					<p><b>Proof:</b> <br>
+						On the white board</p>
+				</section>
+				<section>
+					<h1>Application for linear filtering of w.s. process</h1>
+					<div class="exemple"> 
+						<div id="title"> Property </div> 
+						If $X$ is a w.s. with mean, autocovariance and spectral measure $\mu_X, \gamma_X$ and $\nu_X$ respectively then:<br>
+						<ol>
+							<li>$Y=F_\alpha(X)$ with $\alpha \in \ell^1(\mathbb{Z})$ is a w.s. process</li>
+							<li>its mean is $\mu_Y = (\sum_{k} \alpha_k)\mu_X$</li>
+							<li>its autocovariance $\gamma_Y$ is $\gamma_Y(h) = \sum_{k,k^\prime} \alpha_k \bar{\alpha}_{k^\prime}\gamma_X(h+k^\prime - k)$</li>
+							<li>$\nu_Y(d\lambda) = \left|\sum_k \alpha_k e^{-i\lambda k}\right|^2 \nu_X(d\lambda)$ ($\lambda \mapsto\left|\sum_k \alpha_k e^{-i\lambda k}\right|^2$ is the density of $\nu_x$, $2\pi-$ periodic and continueous) </li>
+						</ol>
+					</div>
+										<p><b>Proof:</b> <br>
+						On the white board</p>
+
+										<p><b>Remark:</b><br>
+				Note that if $X \sim WN(0,\sigma^2)$ then 
+				$$\gamma_Y(h) = \sum_{k, k^\prime} \alpha_k \bar{\alpha_{k^\prime}}\gamma_X(h + k^\prime - k)
+				\underset{\text{only when } h+k^\prime -k = 0}{=} \sum_{k^\prime} \alpha_{k^\prime + h} \bar{\alpha_{k^\prime}}$$
+			We also get $f_Y(\lambda) = \frac{\sigma^2}{2\pi} \left|\sum_k \alpha_k e^{-i\lambda k}\right|^2$
+		</p>
+				</section>
+				<section>
+					<h1>Composition of linear filters</h1>
+					We define :<br>
+					<ul>
+						<li>$(\alpha \star \beta)_k = \sum_{j \in \mathbb{Z}} \alpha_j \beta_{k-j}$</li>
+						<li>$\alpha \star \beta = \beta \star \alpha$</li>
+						<li>$\mathcal{F}(\alpha \star \beta) = \mathcal{F}(\alpha) \mathcal{F}(\beta)$</li>
+					</ul>
+
+				We have the interesting property (proof in the handbook)
+					<div class="exemple"> 
+						<div id="title"> Property </div> 
+						Let $X$ be w.s. and $\alpha, \beta \in \ell^1(\mathbb{Z})$ then: 
+						<center>
+						$$
+						F_\alpha \circ F_\beta (X) = F_{\alpha \star \beta}(X) = F_{\beta \star \alpha}(X) = F_{\beta} \circ F_\alpha(X)
+						$$
+						</center>
+					</div>
+										<div class="remarque" style="margin-top:1em;">
+						OK now if we have $Y=F_\alpha(X)$, can we find $\beta$ such that $F_\beta(Y) = X$ ?
+					</div>
+				</section>
+
+				<section>
+					<h1>Inversion of a linear filter</h1>
+					<div class="remarque" style="margin-top:1em;">
+						OK now if we have $Y=F_\alpha(X)$, can we find $\beta$ such that $F_\beta(Y) = X$ ?
+					</div>
+					Yes if 
+					<center>$$
+						\exists \beta \in \ell^1(\mathbb{Z}) \text{ such that } \alpha \star \beta = \delta_0
+					$$</center>
+
+					Indeed, we get that:
+					<center>
+						$$
+						F_{\beta}\left(Y\right)=F_{\beta}\circ F_{\alpha}\left(X\right)=F_{\alpha\star\beta}\left(X\right)=F_{\delta_0}\left(X\right)
+						$$
+						
+					</center>
+					and $F_{\delta_0}\left(X\right)=\left(\sum\delta_{0}\left(k\right)X_{t-k}\right)=X_{t}$. Observe moreover that $\forall \alpha, \beta \in \ell^1(\mathbb{Z}):$
+					<center>
+						$$
+						\mathcal{F}\left(\alpha\star\beta\right)	=\mathcal{F}\left(\delta\right)
+\Leftrightarrow	\mathcal{F}\left(\alpha\right)\mathcal{F}\left(\beta\right)=\sum_{k}\delta_{0}\left(k\right)e^{-2i\pi k}=1
+						$$
+					</center>
+
+										<div class="remarque" style="margin-top:1em;">
+						Do we have "more accurate results" for FIR filter ?
+					</div>
+				
+
+				</section>
+				<section>
+					<h1>Inversion of FIR filter</h1>
+					In the case of $F_\alpha$ being a FIR filter, we have the following result (proof in the handbook)
+						<div class="exemple"> 
+						<div id="title"> Property </div> 
+						Let's define: 
+						$P,Q$ two polynoms with no common roots where $Q(0)=1, Q$ does not vanish on the unit circle and $R_{\delta_1, \delta_2} = \{z \in \mathbb{C}, \delta_1 < |z| < \delta_2\}$
+						where $\delta_1 = \{\text{biggest root of Q with modulus < 1}\}, \delta_2 = \{\text{smallest root of Q with modulus > 1}\}$
+						<br>Then the rational function $P/Q$ admits the following unfiormly convergent series expansion $\forall z \in R_{\delta_1, \delta_2}$:
+						<center>
+							$$
+							\frac{P}{Q}(z) = \sum_{t \in \mathbb{Z}}\psi_t z^t
+							$$
+						</center>
+						with $\psi \in \ell^1(\mathbb{Z})$. Moreover if $X$ is w.s. then 
+						<center>
+						$$
+						F_\psi \circ [Q(B)](X) = [P(B)](X)
+						$$
+						</center>
+					</div>
+					Thus if we put $P=1$ in the previous property we get $F_\psi(Q(X)) := F_\psi(Y)  = X$. Meaning we have the inverse filter of any FIR  filter of the form $Q(B)$.
+				</section>
+
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id='coverh2'>IV - AR, MA, ARMA Processes</h2>
+				</section>
+				<section>
+					<h1>Convention, Definition</h1>
+					<ul>
+						<li>We only consider centered real ARMA process</li>
+					</ul>
+
+					<div class="exemple"> 
+						<div id="title"> Definition [ARMA Process] </div> 
+						Let $p,q$ be nonnegative integers and 
+						$\theta_{1},\dots,\theta_{q},\varphi_{1},\dots,\varphi_{p}$ be real or complex coefficients. 
+						$X=\left(X_{t}\right)$ is called an <b>ARMA(p,q)</b> process with MA coefficients
+						 $\theta_{1},\dots,\theta_{q}$ and AR coefficients $\varphi_{1},\dots,\varphi_{p}$ if $X$ is w.s. and there exists
+						  a centered white noise $Z=\left(Z_{t}\right)_{t\in\mathbb{Z}}$ such that:
+						 <center> 
+						 $$ \forall t\in\mathbb{Z},X_{t}=\sum_{k=1}^{p}\varphi_{k}X_{t-k}+Z_{t}+\sum_{k=1}^{q}\theta_{k}Z_{t-k}$$
+						 </center>
+						 An MA(q) process occurs when $p=0$ (and the left part is equal to 0).
+						  An AR(p) process occurs when $q=0$ (and then the right part is equal to 0).
+						   If $p=q=0$ we get a centered white noise.
+						 If we denotes the following polynom:
+						<center> $$
+						 \Phi\left(z\right)	=1-\sum_{k=1}^{p}\varphi_{k}z^{k}; \quad
+						\Theta\left(z\right)	= 1+\sum_{k=1}^{q}\theta_{k}z^{k}
+						$$</center>
+						 and recall that $B$ is the backshift operator then we get:
+						<center>$$\Phi\left(B\right)X=\Theta\left(B\right)Z$$</center>
+					</div>
+				</section>
+				<section>
+					<h1>Zoom on solutions of MA(q) process </h1>
+					In this case, $p=0$ and $X=\Theta(B)Z$ uniquely defines $X$. Using the previous results (i.e. autocovariance and spectral measure of a white noise) we have :
+
+					<center>
+						$$
+						X_t = \sum_{k=0}^{q} \theta_k Z_{t-k}
+						$$
+					</center>
+					meaning that 
+					<center>
+						$$\gamma_X(h) = \sigma^2 \sum_{k\in \mathbb{Z}}\theta_{k+h} \bar{\theta}_k$$
+					</center>
+					with $\theta_r = 0$ if $r < 0 $ or $r > q$.
+					By checking carefully for each $h$ (check $h < q, h >q, -q \leq h \leq 0$ and $0\leq h \leq q$ for instance) we get that:
+					<center>
+						$$
+						\gamma_{X}\left(h\right)=\begin{cases}
+\sigma^{2}\sum_{k=0}^{q-h}\bar{\theta_{k}}\theta_{k+h} & \mathrm{if}\:0\leq h\leq q\\
+\sigma^{2}\sum_{k=0}^{q+h}\bar{\theta_{k}}\theta_{k-h} & \mathrm{if}\:-q\leq h\leq0\\
+0 & \mathrm{otherwise}
+\end{cases}
+						$$
+					</center>
+					For an AR(1) $X_t = \phi_1X_{t-1} + Z_t$ with $\phi_1 \neq 0$ then $X_{t-1} = \phi_1^{-1}(X_t-Z_t)$. It means that we can choose an $X_0$ and compute the other using the previous equation. 
+					<div class="remarque" style="margin-top:1em;">
+						What about for any ARMA case ? 
+					</div>
+				</section>
+				<section>
+					<h1>Solutions of ARMA (p,q)</h1>
+					In the general case we have the following result :
+					<div class="exemple"> 
+						<div id="title"> Property </div> 
+						Let consider
+						<center>
+						$$
+						
+						\Phi\left(z\right)	= 1-\sum_{k=1}^{p}\varphi_{k}z^{k}; \quad
+						\Theta\left(z\right)	= 1+\sum_{k=1}^{q}\theta_{k}z^{k}
+
+						$$
+						</center>
+						$Z	\sim WN\left(0,\sigma^{2}\right)$ and the condition (A):
+						<center>
+						$$\forall z\in\mathbb{U}=\left\{ z\in\mathbb{C}\mid\left|z\right|=1\right\} ,
+						\Phi\left(z\right)\neq 0 $$
+						</center>
+						then:
+						<ol>
+							<li>If (A) holds then it exists a unique weakly stationary time series $X=\left(X_{t}\right)$ such that we get the following condition (*):
+								<center>$$\Phi\left(B\right)X=\Theta\left(B\right)Z$$</center>
+
+
+							</li>
+							<li>If $\Phi$ and $\Theta$ do not have common complex roots, then (A) is necessary to have a weakly stationary solution of (*).</li>
+							<li>Under (A), the solution X of (*) has the spectral density given by:
+								<center>$$
+								f\left(\lambda\right)=
+								\left|\frac{\Theta\left(e^{-i\lambda}\right)}{\Phi\left(e^{-i\lambda}\right)}\right|^{2}
+								\frac{\sigma^{2}}{2\pi}$$
+								</center>
+							</li>
+						</ol>
+					</div>
+				</section>
+
+				<section>
+					<h1>Causal, Anticausal filters and ARMA representations</h1>
+					Recall that for a filter $F_\psi:x\mapsto y = \psi \star x$ is said to be : 
+					<ol>
+						<li>a finite impulse response (FIR) if $\psi$ is finitely supported</li>
+						<li>Causal if $\psi_t=0, \forall t < 0$</li>
+						<li> Anticausal if $\psi_t=0, \forall t \geq 0$</li>
+						<li>Invertible if there is exists $\phi \in \ell^1$ such that $y=F_\phi(x)$</li>
+					</ol>
+					If the ARMA eqution has a  w.s. solution $X = F_\psi(Z)$ we said that it provide
+					<ol>
+						<li>a causal, invertible or canonical representation of $X$ if $F_\psi$ is causal, invertible + its inverse is causal,
+							or is causal + invertible + its inverse is causal respectively.
+						</li>
+					</ol>
+				</section>
+				<section>
+					<h1>Canonical representation of an ARMA process</h1>
+					We first have the following results:
+				    <div class="exemple"> 
+						<div id="title"> Theorem</div> 
+						the ARMA equation $X=F_{\psi}(Z)$ where $\Phi, \Theta$ does not have common roots is
+						<ol>
+							<li>Causal iff $\Phi$ does not vanish on the unit closed disk</li>
+							<li>Invertible iff $\Theta$ does not vanish on the unit closed disk</li>
+							<li>Canonical iff $\Phi, \Theta$ does not vanish on the unit closed disk</li>
+						</ol>
+					</div>
+					<p><b>Proof</b>: check Lemma 3.2.3. and the results becomes trivial</p>
+
+					We also have existence of a canonical representation under some assumptions:
+					<div class="exemple"> 
+						<div id="title"> Theorem</div> 
+						Let $X$ a w.s. solution of an ARMA process $\Phi(B)[X] = \Theta(B)(Z)$ where $\Phi, \Theta$ have
+						no common roots and no roots on the unit circles. It exists two polynoms $\tilde{\Phi}, \tilde{\Theta}$
+						 which vanish outside of the unique circle  and such that:
+						 <center>
+							$$
+							\tilde{\Phi}(X) = \tilde{\Theta}(B)(\tilde{Z})
+							\qquad (1) $$ 
+						 </center>
+						 where $\tilde{Z} \sim WN(0, \tilde{\sigma}^2)$. (1) is a canonical representation of $X$.
+					</div>
+					<p><b>Proof</b>: On the whiteboard</p>
+				</section>
+				<section>
+					<h1>Example</h1>
+					We consider $Z_t \sim WN(0, 1)$.
+					<ul>
+					<li>ARMA $\left(1,1\right):X_{t}=\frac{3}{2}X_{t-1}+Z_{t}-\frac{1}{2}Z_{t}$ (determine also the variance of $\tilde{Z}_t$)</li>
+					<li>ARMA $\left(2,1\right):X_{t}=\frac{5}{2}X_{t-1} + X_{t-2}+Z_{t}-3Z_{t}$</li>
+				</ul>
+									<div class="remarque" style="margin-top:1em;">
+						What can it be used for the canonical representation ?
+					</div>
+				</section>
+				<section>
+					<h1>Innovation process for a canonical representation</h1>
+				The most important result is that the innovation of a canonical representation is trivial
+				    <div class="exemple"> 
+						<div id="title"> Theorem</div> 
+						Let $X$ be the w.s. solution of an ARMA process with $\Phi(B)[X] = \Theta(B)(Z)$ where $\Phi, \Theta$ defined as previously. Then, 
+						$Z$ is the innovation process of $X$. 
+					</div>
+					<p><b>Proof:</b> On the whiteboard</p>
+					<p><b>Danger ! </b>: if you have $aZ_t$ then this the innovation process (not $Z_t$ directly. remember the definition of $\Theta$)</p>
+
+					<p><b>Applications:</b>
+					On the previous examples:
+					<li>$X_{t}=\frac{3}{2}X_{t-1}+Z_{t}-\frac{1}{2}Z_{t}$ </li>
+					<li>$X_{t}=\frac{5}{2}X_{t-1} + X_{t-2}+Z_{t}-3Z_{t}$</li>
+					</p>
+				</section>
+				<section>
+					<h1>Identify the order of MA(p) and AR(q)</h1>
+					Here are three theorems useful for such a task:
+					<div class="exemple"> 
+						<div id="title"> Theorem</div> 
+						Le $X$ be a w.s. centered with autocovariance $\gamma$. Then $X$ is a $MA(q)$ iff. $\gamma(h) = 0$ for all $|h| > q$.
+					</div>
+					<p><b>Proof:</b> see exercise 5.2. (or if we have time) </p>
+				<div class="remarque" style="margin-top:1em;">
+						What about AR process ?
+					</div>
+				</section>
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id='coverh2'>V - Linear Prediction, Levinson algorithm</h2>
+				</section>
+				<section>
+					<h1>Go back to Innovation process</h1>
+				As a reminder we recall: 
+										<ul>
+							<li>A finie dimensional projection space: 
+								$\mathcal{H}_{t,p}^{X} \triangleq
+								 \mathrm{Span}(X_s, t-p \leq s \leq t)$</li>
+							<li>$\mathcal{H}_{t}^{X} 
+								\triangleq
+								 \overline{\mathrm{Span}}(X_s, s \leq t)$</li>
+						</ul>
+				<br>One can show that for any variable $Y$ in $L^2$
+				 $\lim_{p \to \infty} \mathrm{proj}(Y \mid\mathcal{H}_{t,p}^{X}) = \mathrm{proj}(Y \mid\mathcal{H}_{t}^{X})$
+				 (limit in the $L^2$ sense). We then define the prediction coefficients
+
+				 	<div class="exemple"> 
+						<div id="title"> Definition [Prediction coefficients]</div> 
+						For $X$  a centered w.s. process we call the <b>predictor of order p</b>
+						 the variable $\mathrm{proj}(Y \mid\mathcal{H}_{t-1,p}^{X})$. It's
+						 <b> partial innovation process of order p</b> denote $\epsilon_p^{+}$ defined by
+						 <center>
+							$$
+							\epsilon_{t,p}^{+} = X_t - \mathrm{proj}(X_t \mid \mathcal{H}_{t-1,p}^{X})
+							$$
+						 </center>
+					 We thus define the <b>predictions coefficients</b> as the ones satisfying: 
+					 <center>
+						$$
+						\mathrm{proj}(X_t \mid \mathcal{H}_{t-1,p}^{X}) = \sum_{k=1}^{p}\phi_{k,p}^{+}X_{t-k}
+						$$
+					 </center>
+					</div>
+
+				</section>
+				<section>
+				<h1>The Yule-Walker Equation (1/2)</h1>
+					by the orthogonal principle, the $\epsilon_{t,p}^{+}$ should be orthogonal to $\mathcal{H}_{t-1,p}^{X}$ meaning that for $j =1, \dots, p, 
+					<\epsilon_{t,p}^{+}, X_{t-j}> = < X_t - \sum_{k=1}^p\phi_kX_{t-k} > = 0$ or in other words:
+					<center>
+						$$
+						\begin{aligned}
+						\mathbb{E}[X_t \overline{X_{t-j}}] &= \sum_{k=1}^{p}\phi_{k,p}^+\mathbb{E}[X_{t-k} \overline{X_{t-j}}] \\
+						\gamma(j) &= \sum_{k=1}^{p} \phi_k\gamma(j-k)
+						\end{aligned}
+						$$
+					</center>
+					By setting:
+					$$
+
+						\underbrace{
+						\begin{pmatrix}
+						\gamma(0)      & \gamma(-1)     & \gamma(-2)     & \cdots & \gamma(-p+1)\\
+						\gamma(1)      & \gamma(0)      & \gamma(-1)     & \cdots & \gamma(-p+2)\\
+						\gamma(2)      & \gamma(1)      & \gamma(0)      & \cdots & \gamma(-p+3)\\
+						\vdots         & \vdots         & \vdots         & \ddots & \vdots      \\
+						\gamma(p-1)    & \gamma(p-2)    & \gamma(p-3)    & \cdots & \gamma(0)
+						\end{pmatrix}
+						}_{\displaystyle \Gamma_p^+}
+						\,
+						\underbrace{
+						\begin{pmatrix}
+						\phi_{1,p}^+\\[2pt]
+						\phi_{2,p}^+\\[2pt]
+						\vdots\\[2pt]
+						\phi_{p,p}^+
+						\end{pmatrix}
+						}_{\displaystyle \phi_p^+}
+						=
+						\underbrace{
+						\begin{pmatrix}
+						\gamma(1)\\[2pt]
+						\gamma(2)\\[2pt]
+						\vdots\\[2pt]
+						\gamma(p)
+						\end{pmatrix}
+						}_{\displaystyle \gamma_p}.
+
+					$$
+				</section>
+				<section>
+					<h1>The Yule-Walker Equation (2/2)</h1>
+
+					We get the simple relation :
+					<center>
+					$$
+					\Gamma_p^+ \phi_p^+ = \gamma_p \qquad \texttt{(Yule-Walker Equation 1)}
+					$$
+					</center>
+					The variance of the order-p prediction error $\epsilon_p^{+}$ verifies
+					 $\sigma_p^2 = \mathbb{E}[|X_t-\mathrm{proj}(X_t \mid \mathcal{H}_{t-1,p}^{X})|] = < X_t, X_t - \mathrm{proj}(X_t \mid \mathcal{H}_{t-1,p}^X) >$ and verifies thus:
+					 <center>
+					 $$
+					 \sigma_p^2 = \gamma(0) - (\phi_p^+)^{\mathrm{H}}\gamma_p^+ \qquad  \texttt{(Yule-Walker Equation 2)}
+					 $$
+					 </center>
+					 We have a unique solution $(\phi_p^+, \sigma_p^2)$ iff $\Gamma_p^+$ is invertible.
+
+					 <div class="remarque">
+						We will see later a simple condition for $\Gamma_p^+$ to be invertible and various efficient manner to compute it. 
+					 </div>
+				</section>
+				<section>
+					<h1>Partial autocorrelation function</h1>
+
+
+					We define the partial autocorellation function 
+					<div class="exemple"> 
+						<div id="title"> Definition [PACF]</div> 
+						For $X$  a  w.s. process, the PACF is defined by 
+						<center>
+						$$
+						\kappa(p) = \phi_{p,p}^+, p=1,2,\dots 
+						$$
+						where $\phi_p^+ = (\phi_{k,p}^+)_{k=1, \dots, p}$ denote the prediction coefficients of $X$. 
+						</center>
+					</div>
+
+				</section>
+				<section>
+					<h1>Characterization of AR(p) process</h1>
+										<div class="exemple"> 
+						<div id="title"> Theorem</div> 
+						For $X$  an AR(p) w.s. process with causal representation :
+						$$
+						X_t = \phi_1 X_{t-1} + \dots + \phi_pX_{t-p} + Z_t
+						$$
+						where $Z \sim WN(0,\sigma^2)$. Then $\forall m \geq p$ we have:
+						<center>
+						$$
+						\phi_m^+ = [\phi_1, \dots, \phi_p, \underbrace{0, \dots, 0}_{m-p}]^\top
+						$$
+						</center>
+						Meaning that $\mathrm{proj}(X_t \mid \mathcal{H}_{t-1,m}^X) = \sum_{k=1}^p \phi_k X_{t-k}$ 
+						and in particular the prediction error of order $m$ is $Z_t$ and has variance $\sigma^2$. Moreover,
+						the error is constant for all $m \geq p$.
+					</div>
+
+					We then get the following characterization for the AR(p) process
+
+					<div class="exemple"> 
+						<div id="title"> Theorem</div> 
+						Let $X$ be a centered w.s. process with PACF $\kappa$. Then $X$ ins an $AR(p)$ process iff $\kappa(m) = 0, \forall m> p$.
+					</div>
+					<p><b>Proof : </b> both on the white board</p>
+					<div class="remarque">
+						We will see later how to compute it in practice
+					 </div>
+				</section>
+
+				<section>
+					<h1>Cholesky decomposition of $\Gamma_p^+$</h1>
+					Recall the Yule-Walker equations with  $\sigma_p$ variance of the order-p prediction error $\epsilon_p^{+}$:
+					<center>
+					$$
+					\Gamma_p^+ \phi_p^+ = \gamma_p;  \sigma_p^2 = \gamma(0) - (\phi_p^+)^{\mathrm{H}}\gamma_p^+ \qquad \texttt{(Yule-Walker Equations)}
+					$$
+					</center>
+
+					 We have the following decomposition for $\Gamma_{p}^+$ providing condition on its invertibility
+					<div class="exemple"> 
+						<div id="title"> Theorem</div> 
+						Let $X$ be a centered w.s. process with autocovariance function $\gamma$. Let $\sigma_0^2=\gamma(0)$  and for $p\geq 1, (\phi_p^+,\sigma_p^2)$ be any solution of the Yule-Walker equations.
+						Then for $p=0,1,\dots$
+						<center>
+							$$\Gamma_{p+1}^+ = A_{p+1}^{-1}D_{p+1}(A_{p+1}^{H})^{-1};~
+							
+						A_{p+1} = \begin{pmatrix}
+						1     &  0    & \cdots      & \cdots & 0\\
+						-\phi_{1,1}^+      & 1     & \ddots     &  & \vdots\\
+						\vdots      &      & \ddots     & \ddots & \vdots\\
+						\vdots         &          &         & \ddots & 0      \\
+						-\phi_{p,p}^+     & -\phi_{p-1,p}^+    & \cdots   & -\phi_{1,p}^+ & 1
+						\end{pmatrix};~ D_{p+1} = \mathrm{Diag}((\sigma_i^2)_{i=0}^{p})
+							$$
+
+						</center>
+						In particular, $\Gamma_{p+1}^+$ is invertible iff $\sigma_p^2 >0$
+						</div>
+						<p><b>Proof:</b> On the whiteboard</p>
+
+				</section>
+				<section>
+					<h1>Levinson-Durbin Algorithm</h1>
+					In practice, the Choleski decomposition requires $O(p^3)$ operations. 
+					The folowing algorithm solve the YW equations in $O(p^2)$ operations
+					<div class="exemple" style="font-size:80%">
+						$$
+						\begin{array}{l l}
+						\textbf{Input:} & \gamma(k),\; k=0,\dots,K \\[3pt]
+						\textbf{Output:} & \phi^+_{m,p},\; \kappa(p) \\[6pt]
+						\hline
+						\text{Init:} & 
+						\begin{cases}
+						\kappa(1) = \gamma(1)/\gamma(0), \\
+						\phi^+_{1,1} = \gamma(1)/\gamma(0), \\
+						\sigma_1^2 = \gamma(0)(1 - |\kappa(1)|^2)
+						\end{cases} \\[8pt]
+						\text{For } p=1,\dots,K-1: &
+						\begin{cases}
+						\kappa(p+1) = \sigma_p^{-2}\!\left[\gamma(p+1) - \sum_{k=1}^{p} \phi^+_{k,p}\gamma(p+1-k)\right],\\[4pt]
+						\sigma_{p+1}^2 = \sigma_p^2(1 - |\kappa(p+1)|^2),\\[4pt]
+						\phi^+_{p+1,p+1} = \kappa(p+1),\\[4pt]
+						\text{For } m=1,\dots,p:~ 
+						\phi^+_{m,p+1} = \phi^+_{m,p} - \kappa(p+1)\overline{\phi^+_{p+1-m,p}}
+						\end{cases}
+\end{array}
+						$$
+					</div>
+<p>If we have  $(X_t)$ a centered ws. process  and $\sigma^2_{K-1}>0$ then the algorithm can be applied with $\sigma_0^2=\gamma(0)$.
+</p>
+<b>Proof:</b> on the whiteboard				
+</section>
+<section>
+	<h1>Compuation of the filter coefficients and Autocovariance function for a Causal ARMA representation</h1>
+<div class="exemple" style="font-size:80%">
+$$
+\begin{array}{l l}
+\textbf{Input:} & \phi_1,\dots,\phi_r;\ \theta_1,\dots,\theta_r;\ \sigma^2 \\[3pt]
+\textbf{Output:} & \{\psi_k\}_{k\ge 0},\ \gamma(\tau) \\[6pt]
+\hline
+\text{Step 1 (filter):} &
+\begin{cases}
+\psi_0 = 1, \\[4pt]
+\text{For } k=1,\dots,r:\ \ \psi_k = \theta_k + \sum_{j=1}^{k} \psi_{k-j}\,\phi_j, \\[6pt]
+\text{For } k=r+1,r+2,\dots:\ \ \psi_k = \sum_{j=1}^{r} \psi_{k-j}\,\phi_j
+\end{cases}
+\\[10pt]
+\text{Step 2 (autocov.):} &
+\begin{cases}
+\text{For } \tau=0,1,2,\dots:\ \ \gamma(\tau)=\sigma^2 \sum_{k=0}^{\infty}\overline{\psi_k}\,\psi_{k+\tau}, \\[6pt]
+\text{For } \tau=-1,-2,\dots:\ \ \gamma(\tau)=\overline{\gamma(-\tau)}
+\end{cases}
+\end{array}
+$$
+</div>
+<p>
+If we consider $X$ an ARMA(p,q) process causal and such that $r=max(p,q)$ with $\theta_j=0, q< j \leq r$ and $\phi_j=0, p < j \leq r$
+then the algorithm applies.
+</p>
+<b>Proof:</b> On the whiteboard
+</section>
+<section>
+	<h1>Computation of the autocovariance in a finite number of operations</h1>
+	<div class="exemple" style="font-size:75%">
+$$
+\begin{array}{l l}
+\textbf{Input:} & 
+\phi_1,\dots,\phi_r;\ \theta_1,\dots,\theta_r;\ \sigma^2;\ \text{lag } m \\[3pt]
+\textbf{Output:} & 
+\psi_k\ (k=0,\dots,r),\ \gamma(\tau)\ (\tau=-m,\dots,m) \\[6pt]
+\hline
+\text{Step 1 (filter):} &
+\begin{cases}
+\psi_0 = 1, \\[4pt]
+\text{For } k=1,\dots,r:\ \ \psi_k = \theta_k + \sum_{j=1}^{k} \psi_{k-j}\,\phi_j
+\end{cases}
+\\[10pt]
+\text{Step 2 (initial covariances):} &
+\begin{cases}
+\text{Use } \gamma(-j)=\overline{\gamma(j)} \text{ and set } \theta_0=1,\\[4pt]
+\text{Solve for } \gamma(\tau),\ 0\le\tau\le r: \\[4pt]
+\gamma(\tau) - \phi_1\gamma(\tau-1) - \cdots - \phi_r\gamma(\tau-r)
+= \sigma^2 \sum_{\tau \le j \le r} \theta_j\,\overline{\psi}_{j-\tau}
+\end{cases}
+\\[12pt]
+\text{Step 3 (induction):} &
+\begin{cases}
+\mathrm{For}\ \tau = r+1, r+2, \ldots, m:\quad
+\gamma(\tau) = \phi_1 \gamma(\tau-1) + \cdots + \phi_r \gamma(\tau-r),\\
+\mathrm{For}\ \tau = -1, -2, \ldots, -m:\quad
+\gamma(\tau) = \overline{\gamma(-\tau)}
+\end{cases}
+\end{array}
+$$
+</div>
+<p>
+Under the same assumption as the previous algorithm, this algorithm applies.
+</p>
+<b>Proof:</b> On the whiteboard
+</section>
+			</div>
+
+
+<div class='footer'>
+	<img src="css/theme/img/logo-Telecom.svg" alt="Logo"/>
+	<div id="middlebox">Variance-Based Analysis - APM_5MV75_TP</div>
+</div>
+			</div>
+
+		</div>
+
+		<script src="js/reveal.js"></script>
+
+		<script>
+			// More info about config & dependencies:
+			// - https://github.com/hakimel/reveal.js#configuration
+			// - https://github.com/hakimel/reveal.js#dependencies
+			Reveal.initialize({
+				controls: false,
+				progress: true,
+				history: true,
+				center: false,
+				slideNumber: true,
+				minScale: 0.1,
+				maxScale: 5,
+				transition: 'none', //
+
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/math-katex/math-katex.js', async: true },
+					{ src: 'plugin/reveald3/reveald3.js' },
+					{ src: 'plugin/highlight/highlight.js', async: true }
+				]
+			});
+		</script>
+
+	</body>
+
+</html>

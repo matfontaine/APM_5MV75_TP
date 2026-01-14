@@ -1,0 +1,1305 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>APM_5MV75_TP - Télécom Paris</title>
+
+		<link rel="stylesheet" href="css/reset.css">
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/telecom.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/github.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match(/print-pdf/gi) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName('head')[0].appendChild(link);
+		</script>
+	</head>
+
+	<body>
+		<div class="reveal">
+			<div class="slides">
+
+				<!-- ========================================================= -->
+				<!-- Cover -->
+				<!-- ========================================================= -->
+				<section class="cover" data-background="figures/background-blur.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">XAI: Variance-Based Analysis</h2>
+					<h1 id="title_seminar">MVA - APM_5MV75_TP</h1>
+					<h3>
+						<a href="https://matfontaine.github.io/APM_5MV75_TP" id="github_url">matfontaine.github.io/APM_5MV75_TP</a>
+					</h3>
+
+					<p id="coverauthors">
+						Mathieu FONTAINE<br />
+						mathieu.fontaine@telecom-paris.fr
+					</p>
+
+					<p id="date">January 2025</p>
+
+					<p>
+						<img src="css/theme/img/logo-Telecom.svg" id="telecom" class="logo" alt="">
+					</p>
+
+					<aside class="notes">
+						<ul>
+							<li>Goal: define "feature importance" precisely, then introduce Sobol indices and their use for local XAI (Fel et al.).</li>
+							<li>Big picture: importance is not a primitive concept — it depends on how we vary the input.</li>
+							<li>We will emphasize interactions (why total-order indices matter in deep models and in audio).</li>
+						</ul>
+					</aside>
+				</section>
+
+				<!-- ========================================================= -->
+				<!-- Outline -->
+				<!-- ========================================================= -->
+				<section>
+					<h1>Outline</h1>
+					<h2>I - What Does “Feature Importance” Really Mean?</h2>
+					<h2>II - Measuring Importance Through Variance</h2>
+					<h2>III - Sobol Decomposition: Theory and Interpretation <span style="font-family:monospace;">[Sob. 01]</span></h2>
+					<h2>IV - Local Feature Importance via Perturbations <span style="font-family:monospace;">[Fel. 21]</span></h2>
+					<h2>V - Sobol Indices Estimation</h2>
+					<h2>VI - What Sobol Explains (and What It Does Not)</h2>
+					<h2>VII - Take-Home Messages</h2>
+
+					<aside class="notes">
+						<ul>
+							<li>Part I: make the concept of importance explicit with simple examples.</li>
+							<li>Part II: introduce variance and conditional variance as the clean measure of sensitivity.</li>
+							<li>Part III: functional ANOVA / Sobol decomposition (why variance becomes additive).</li>
+							<li>Part IV: turn Sobol into local XAI by studying perturbation masks around a fixed input.</li>
+							<li>Part V: practical estimators (Saltelli/Jansen) + sample efficiency (QMC + Sobol sequences).</li>
+							<li>Part VI: interpretability caveats (off-manifold, baseline dependence, independence assumptions).</li>
+						</ul>
+					</aside>
+					<div class="references">
+						<ul>
+							<li>Sobol, I. M. Global sensitivity indices for nonlinear mathematical models and their Monte Carlo estimates. <em>Mathematics and computers in simulation</em>, 2001</li>
+							<li>Fel, Thomas, et al. "Look at the variance! efficient black-box explanations with sobol-based sensitivity analysis." <em>NeurIPS</em>, 2021</li>
+						</ul>
+					</div>
+				</section>
+
+				<!-- ========================================================= -->
+				<!-- I -->
+				<!-- ========================================================= -->
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">I - What Does “Feature Importance” Really Mean?</h2>
+					<aside class="notes">
+						<ul>
+							<li>We start with the key point: importance is not uniquely defined.</li>
+							<li>We need to specify how we change the input and how we measure the effect on the prediction.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Not really mathematic…</h1>
+					<ul>
+						<li>Consider a model $f:\mathbb{R}^d \to \mathbb{R}$ (e.g. a classification score).</li>
+						<li>Intuitive definition:</li>
+					</ul>
+
+					<p><b><center>A feature is important if changing it changes the prediction.</center></b></p>
+
+					<br>
+					<div class="remarque">Changing it how?</div>
+					<br>
+
+					<ul>
+						<li>Gradient-based importance (infinitesimal changes)</li>
+						<li>Occlusion / masking (finite removal)</li>
+						<li>SHAP (coalitions / marginal contributions)</li>
+						<li>Sobol (variance decomposition + interactions)</li>
+					</ul>
+
+					<aside class="notes">
+						<ul>
+							<li>Stress: you cannot talk about importance without defining a notion of variation.</li>
+							<li>Different XAI methods correspond to different variation mechanisms + aggregation rules.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Example 1: Linear model</h1>
+					<ul>
+						<li>Consider $f(x_1,x_2)=3x_1+0.1x_2$.</li>
+						<li>Changing $x_1$ affects the output much more than changing $x_2$.</li>
+						<li>In this special case: importance $\approx$ coefficient magnitude.</li>
+						<li>This is a <b>global</b> notion (same for all inputs).</li>
+					</ul>
+
+					<aside class="notes">
+						<ul>
+							<li>Here, "importance" feels obvious because the model is additive and linear.</li>
+							<li>But this breaks as soon as the function is non-linear or interaction-dominated.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Example 2: Gradient (local)</h1>
+					<ul>
+						<li>Consider $f(x_1,x_2)=x_1^2+x_2$.</li>
+						<li>$\nabla f(x) = (2x_1,\,1)$.</li>
+						<li>At $x=(0,1)$: the sensitivity to $x_1$ is $0$, to $x_2$ is $1$.</li>
+						<li>We have a <b>local</b> notion of importance.</li>
+						<li>It depends on the local metric / scaling.</li>
+					</ul>
+
+					<aside class="notes">
+						<ul>
+							<li>Gradient answers: "which infinitesimal direction changes the output most at this point?".</li>
+							<li>It can fail on plateaus, saturations, or when information is mainly in interactions.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Example 3: Occlusion (finite change)</h1>
+					<p>Occlusion = remove some input information and compare the prediction before/after.</p>
+					<center><img src="figures/images/occlusion_illustration.png" width="70%">
+					</center>
+						<ul>
+						<li>Image: hide a patch</li>
+						<li>Audio: remove a frequency band / TF region</li>
+						<li>Text: delete a word</li>
+					</ul>
+
+					<p>
+						Let $f(x_1,x_2)=x_1x_2$ and input $(x_1,x_2)=(1,1)$. Then $f(1,1)=1$.
+						If we remove $x_1$ (set $x_1=0$), then $f(0,1)=0$. If we remove $x_2$, $f(1,0)=0$.
+					</p>
+
+					<div class="remarque">Both are important… individually or only jointly?</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Occlusion detects "usefulness" but does not explain whether the usefulness is due to main effects or interactions.</li>
+							<li>This motivates variance decomposition methods that explicitly separate main/interaction contributions.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Hidden interaction (Sobol motivation)</h1>
+					<p>
+						In $f(x_1,x_2)=x_1x_2$, neither variable has a strong <i>individual</i> effect everywhere:
+						the effect comes from their <b>interaction</b>.
+					</p>
+
+					<div class="remarque">
+						How can we separate what comes from individual effects and what comes from interactions?
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>We want a principled decomposition that assigns a "variance budget" to main effects and interactions.</li>
+							<li>This is the key promise of Sobol indices.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Feature importance (in this course)</h1>
+					<div class="affirmation">
+						Feature importance: measure how much the prediction varies when a given feature is allowed to vary,
+						possibly jointly with others.
+						<p>
+							<b>Sobol:</b> provides an exact and additive decomposition of variance into main effects and interactions (under assumptions).
+						</p>
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>We now formalize "variation" using probability and variance.</li>
+							<li>Then we show how variance can be split across variables and interactions.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<!-- Optional: visual slide placeholder -->
+
+				<section>
+  <h1>Variance-based feature importance</h1>
+
+  <ul>
+    <li>To define "importance", we must define <b>input variability</b>.</li>
+  </ul>
+
+  <center>
+    $$\textbf{(1) Random input:}\qquad X=(X_1,\dots,X_d)\sim p_X$$
+    <br><br>
+    $$\textbf{(2) Random output:}\qquad Y=f(X)$$
+    <br><br>
+    $$\textbf{(3) Global variability:}\qquad \mathrm{Var}(Y)=\mathbb{E}[Y^2]-\mathbb{E}[Y]^2$$
+    <br><br>
+    $$\textbf{(4) Variance explained by }X_i:\qquad \mathrm{Var}\!\big(\mathbb{E}[Y\mid X_i]\big)$$
+  </center>
+
+  <div class="affirmation">
+    Intuition: if knowing $X_i$ changes the conditional mean prediction a lot, then $X_i$ is important.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>At this stage, we do not define any "Sobol index" yet.</li>
+      <li>We only build the variance-based intuition: importance = explained variance.</li>
+      <li>\(\mathbb{E}[Y|X_i]\) is the best prediction of \(Y\) using only \(X_i\).</li>
+      <li>If \(X_i\) carries information, then \(\mathbb{E}[Y|X_i]\) varies with \(X_i\), hence its variance is large.</li>
+      <li>If \(X_i\) is irrelevant, then \(\mathbb{E}[Y|X_i]\approx \mathbb{E}[Y]\), hence variance is ~0.</li>
+    </ul>
+  </aside>
+</section>
+
+
+
+				<!-- ========================================================= -->
+				<!-- II -->
+				<!-- ========================================================= -->
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">II - Measuring Importance Through Variance</h2>
+					<aside class="notes">
+						<ul>
+							<li>We formalize input variations by introducing random variables and studying output variance.</li>
+							<li>Key tool: law of total variance, leading to main and total effects.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Setup: make the output random</h1>
+					<ul>
+						<li>Deterministic model: $f:\mathbb{R}^d \to \mathbb{R}$</li>
+						<li>Introduce random input: $X=(X_1,\dots,X_d)$</li>
+						<li>Output becomes a random variable:</li>
+					</ul>
+					<center>$$Y=f(X)$$</center>
+
+					<div class="remarque">
+						All importance notions depend on how we choose the distribution of $X$ (or local perturbations later).
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Variance-based methods are global by default (distribution over the domain).</li>
+							<li>Fel et al. will adapt this to local explanations using perturbation distributions around a fixed input.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Notation</h1>
+					<ul>
+						<li>For a given index $i$, we denote:</li>
+					</ul>
+					<center>
+						$$X_{\sim i}=(X_1,\dots,X_{i-1},X_{i+1},\dots,X_d)$$
+					</center>
+					<div class="remarque">
+						$X_i$ = “feature of interest”, $X_{\sim i}$ = “all other features”.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>I will use $X_{\sim i}$ everywhere: it simply means “everything except $X_i$”.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Variance as global sensitivity</h1>
+					<ul>
+						<li>Mean and variance:</li>
+					</ul>
+					<center>
+						$$\mathbb{E}[Y]=\int f(x)\,p_X(x)\,dx$$
+						$$\mathrm{Var}(Y)=\mathbb{E}[Y^2]-\mathbb{E}[Y]^2$$
+					</center>
+					<div class="affirmation">
+						High variance $\Rightarrow$ sensitive output. Low variance $\Rightarrow$ stable output.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Variance ignores sign: it measures magnitude of variation, not direction.</li>
+							<li>This is exactly what we need for an “importance magnitude”.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Law of total variance</h1>
+					<ul>
+						<li>For any $Y$ and any variable $X_i$:</li>
+					</ul>
+					<center>
+						$$\mathrm{Var}(Y)=\mathrm{Var}\big(\mathbb{E}[Y\mid X_i]\big)+\mathbb{E}\big[\mathrm{Var}(Y\mid X_i)\big]$$
+					</center>
+					<div class="remarque">
+						This identity is the starting point for variance-based feature importance.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Interpretation: explained variance + residual variance.</li>
+							<li>$\mathrm{Var}(\mathbb{E}[Y|X_i])$: how much the mean output changes with $X_i$.</li>
+							<li>$\mathbb{E}[\mathrm{Var}(Y|X_i)]$: what remains variable even if $X_i$ is known.</li>
+						</ul>
+					</aside>
+				</section>
+
+<section>
+  <h1>Main effect vs total effect</h1>
+
+  <ul>
+    <li><b>Main-effect variance contribution:</b></li>
+  </ul>
+  <center>
+    $$D_i \triangleq \mathrm{Var}\big(\mathbb{E}[Y\mid X_i]\big)$$
+  </center>
+
+  <ul>
+    <li><b>Total-effect variance contribution (includes interactions):</b></li>
+  </ul>
+  <center>
+    $$D_i^{\mathrm{tot}} \triangleq \mathbb{E}\big[\mathrm{Var}(Y\mid X_{\sim i})\big]$$
+    $$= \mathrm{Var}(Y)-\mathrm{Var}\big(\mathbb{E}[Y\mid X_{\sim i}]\big)$$
+  </center>
+
+  <div class="remarque">
+    $D_i$: effect of $X_i$ alone. <br>
+    $D_i^{\mathrm{tot}}$: everything involving $X_i$ (main + interactions).
+  </div>
+</section>
+
+				<section>
+					<h1>Normalized indices</h1>
+					<center>
+						$$S_i \triangleq \frac{D_i}{\mathrm{Var}(Y)} \qquad (\text{first-order})$$
+						$$ST_i \triangleq \frac{D_i^{\mathrm{tot}}}{\mathrm{Var}(Y)} \qquad (\text{total-order})$$
+					</center>
+					<center>$$0 \le S_i \le ST_i \le 1$$</center>
+
+					<aside class="notes">
+						<ul>
+							<li>$S_i$ tells you if the feature matters alone.</li>
+							<li>$ST_i$ tells you if it matters at all (alone or via interactions).</li>
+							<li>The gap $ST_i - S_i$ is an interaction diagnostic.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Toy example A: additive model</h1>
+					<ul>
+						<li>$X_1,X_2 \sim \mathcal{U}[0,1]$ independent, $Y=X_1+X_2$</li>
+					</ul>
+					<center>
+						$$\mathrm{Var}(Y)=\mathrm{Var}(X_1)+\mathrm{Var}(X_2)=\frac{1}{12}+\frac{1}{12}=\frac{1}{6}$$
+						$$D_1=\mathrm{Var}(\mathbb{E}[Y|X_1])=\mathrm{Var}(X_1)=\frac{1}{12}$$
+						$$S_1=\frac{D_1}{\mathrm{Var}(Y)}=\frac{1/12}{1/6}=\frac{1}{2}$$
+					</center>
+					<div class="affirmation">
+						No interactions: $S_1=ST_1=1/2$, $S_2=ST_2=1/2$.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Great sanity check: additive model means no interaction terms in Sobol decomposition.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Toy example B: pure interaction</h1>
+					<ul>
+						<li>$X_1,X_2 \sim \mathcal{U}[0,1]$ independent, $Y=(X_1-\frac{1}{2})(X_2 - \frac{1}{2})$</li>
+					</ul>
+					<center>
+						$$\mathbb{E}[Y]=0$$<br>
+						$$\mathbb{E}[Y^2]=\frac{1}{12}.\frac{1}{12}=\frac{1}{144} = \mathrm{Var}(Y)$$<br>
+						$\mathbb{E}[Y \mid X_1]=0$ etc.
+					</center>
+					<div class="remarque">
+						Main effects vanish: $S_1=S_2=0$. Total effects are maximal: $ST_1=ST_2=1$.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>This is the “interaction-only” archetype: importance exists, but only jointly.</li>
+							<li>This is why we will care about total-order indices for XAI.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<!-- ========================================================= -->
+				<!-- III -->
+				<!-- ========================================================= -->
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">III - Sobol Decomposition: Theory and Interpretation <span style="font-family:monospace;">[Sob. 01]</span></h2>
+					<aside class="notes">
+						<ul>
+							<li>Now we justify why variance splits cleanly across main effects and interactions.</li>
+							<li>We do NOT aim for a full proof; we focus on the role of centering and orthogonality.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Functional ANOVA / Hoeffding decomposition</h1>
+					<ul>
+						<li>Assume $X_1,\dots,X_d$ independent and $f\in L^2$.</li>
+						<li>Assume that $\int f_u(X_u)d\mathbb{P}_{X_i} = 0, \forall i \in u, \forall u \subset \{1, \dots, d\}$</li>
+						<li>Then $f$ admits a unique decomposition:</li>
+					</ul>
+					<center>
+						$$f(X)=f_0+\sum_i f_i(X_i)+\sum_{i< j} f_{ij}(X_i,X_j)+\cdots+f_{1\cdots d}(X_1,\dots,X_d)$$
+					</center>
+					<div class="remarque">
+						“main effects + pairwise interactions + higher-order interactions”.
+					</div>
+
+					<div class="references" style="margin-top:3em;">
+						<ul>
+							<li>Sobol. Sensitivity estimates for nonlinear mathematical models.
+								<em> Wiley</em> 1 407-414, 1993</li>
+								<li>Van Der Vaart, A. W. Asymptotic Statistics. <em>Cambridge University
+Press,</em>,2012 </li>
+						</ul>
+					</div>
+					<aside class="notes">
+						<ul>
+							<li>This is an ANOVA-like decomposition but for general non-linear functions.</li>
+							<li>Each term represents the information not explained by lower-order terms.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Centering constraint for variance additivity (1/2)</h1>
+					<ul>
+						<li>Without constraints, the decomposition is <b>not unique</b> (constants can be moved between terms).</li>
+						<li>The two previous assumptions (aka. zero-mean constraints) make terms identifiable</li>
+					</ul>
+
+					<center>
+						$$\mathbb{E}[f_i(X_i)] = 0,\quad \mathbb{E}[f_{ij}(X_i,X_j)\mid X_i]=0,\quad \mathbb{E}[f_{ij}(X_i,X_j)\mid X_j]=0 $$ etc.
+					</center>
+
+					<div class="remarque">
+						Each term contains only the “new effect” not already captured by lower-order components.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Example: you can add +c to f1 and subtract c from f0: same f. So constraints fix a canonical representation.</li>
+							<li>Interpretation: f_i is the pure main effect after removing the global mean; f_ij is the pure interaction after removing main effects.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Centering constraint for variance additivity (2/2)</h1>
+					<ul>
+						<li>Under independence + centering constraints, ANOVA components are orthogonal:</li>
+					</ul>
+					<center>
+						$$\mathbb{E}\big[f_u(X_u)\,f_v(X_v)\big]=0 \quad \text{for } u\neq v$$
+					</center>
+					<ul>
+						<li>Therefore, variance decomposes exactly:</li>
+					</ul>
+					<center>
+						$$\mathrm{Var}(f(X))=\sum_{u\neq\emptyset}\mathrm{Var}(f_u(X_u))$$
+					</center>
+
+					<div class="affirmation">
+						This is the core reason Sobol indices are “clean”: exact variance budget, no heuristics.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Like perpendicular vectors: cross-terms vanish (no covariance terms).</li>
+							<li>That’s why we choose variance (not Lp norms): it decomposes additively here.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Sobol indices for subsets</h1>
+					<ul>
+						<li>For any subset $u\subseteq\{1,\dots,d\}$:</li>
+					</ul>
+					<center>
+						$$D_u \triangleq \mathrm{Var}(f_u(X_u)),\qquad S_u\triangleq \frac{D_u}{\mathrm{Var}(f(X))}$$
+					</center>
+					<ul>
+						<li>Properties:</li>
+					</ul>
+					<center>
+						$$S_u\ge 0,\qquad \sum_{u\neq\emptyset} S_u = 1$$
+					</center>
+
+					<aside class="notes">
+						<ul>
+							<li>These indices form a probability-like decomposition of variance over subsets.</li>
+							<li>They quantify contribution of each interaction order.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Alternative expressions (useful)</h1>
+					<ul>
+						<li>Main-effect function (intuition):</li>
+					</ul>
+					<center>
+						$$f_i(x_i)=\mathbb{E}[f(X)\mid X_i=x_i]-f_0$$
+					</center>
+					<ul>
+						<li>Main-effect variance contribution (from Part II):</li>
+					</ul>
+					<center>
+						$$D_i=\mathrm{Var}\big(\mathbb{E}[f(X)\mid X_i]\big)$$
+					</center>
+
+					<div class="remarque">
+						This is the bridge between Part II (conditional variance) and Part III (functional ANOVA).
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Students often ask: “where do the functions f_i come from?” Answer: conditional expectation minus global mean.</li>
+							<li>This is also the basis for Monte Carlo estimators.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Total-order index and interactions</h1>
+					<ul>
+						<li>Total-order index aggregates all terms involving feature $i$:</li>
+					</ul>
+					<center>$$ST_i = \sum_{u\ni i} S_u$$</center>
+
+					<div class="remarque">
+						Interpretation: $ST_i$ measures “everything that uses feature $i$” (directly or via interactions).
+					</div>
+
+					<ul>
+						<li>Quick diagnostic:</li>
+					</ul>
+					<center>
+						$$ST_i \approx S_i \Rightarrow \text{weak interactions}, \qquad ST_i \gg S_i \Rightarrow \text{strong interactions}.$$
+					</center>
+
+					<aside class="notes">
+						<ul>
+							<li>For deep networks and signal tasks, the gap is often large: interactions dominate.</li>
+						</ul>
+					</aside>
+				</section>
+
+			
+
+<!-- ========================================================= -->
+<!-- IV - Local Feature Importance via Perturbations [Fel. 21] -->
+<!-- ========================================================= -->
+
+<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+  <h2 id="coverh2">IV - Local Feature Importance via Perturbations <span style="font-family:monospace;">[Fel. 21]</span></h2>
+  <aside class="notes">
+    <ul>
+      <li>Part II–III were global: Sobol indices measure sensitivity under an input distribution.</li>
+      <li>Fel et al. adapt Sobol to LOCAL explanations by introducing a perturbation distribution around a fixed input x.</li>
+      <li>Randomness here is not the dataset distribution: it is the perturbation mask distribution.</li>
+      <li>Goal: produce a saliency map (heatmap) for one input x.</li>
+    </ul>
+  </aside>
+</section>
+
+
+<section>
+  <h1>Local explanation (1/2)</h1>
+<figure style="text-align:center;">
+  <img src="figures/images/look_summarize.png" width="80%">
+  <figcaption style="font-size:0.55em; margin-top:8px; opacity:0.8;">
+    Local variance-based explanation $\texttt{[Fel. 21]}$: perturb patches, evaluate the model, estimate total-order Sobol indices, and visualize as a heatmap.
+  </figcaption>
+</figure>
+  <ul>
+    <li>We want to explain a <b>single input</b> $x$ (image / audio / text).</li>
+    <li>Introduce a random mask $M=(M_1,\dots,M_d)$ controlling visibility of regions.</li>
+    <li>Define a perturbation operator $\Phi(x,M)$.</li>
+  </ul>
+
+</section>
+
+<section>
+  <h1>Local explanation (2/2)</h1>
+  <ul>
+    <li>We want to explain a <b>single input</b> $x$ (image / audio / text).</li>
+    <li>Introduce a random mask $M=(M_1,\dots,M_d)$ controlling visibility of regions.</li>
+    <li>Define a perturbation operator $\Phi(x,M)$.</li>
+  </ul>
+
+  <center>
+    $$M=(M_1,\dots,M_d)\in[0,1]^d$$
+    $$\tilde x = \Phi(x,M)$$
+    $$Y = f(\tilde x)=f(\Phi(x,M))$$
+  </center>
+
+  <div class="affirmation">
+    We apply variance-based analysis to the random variable $Y$ induced by random perturbations $M$.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>Very important: here “features” are the components of the mask, not raw pixels.</li>
+      <li>We can choose d as patches / superpixels / TF tiles / words.</li>
+      <li>Independence assumption is now on mask variables, and is often true by design (we sample them i.i.d.).</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Perturbation operator: baseline inpainting</h1>
+  <ul>
+    <li>Typical continuous perturbation used in the paper:</li>
+  </ul>
+
+  <center>
+    $$\Phi(x,M)=x\odot M + (1-M)\odot \mu$$
+  </center>
+
+  <ul>
+    <li>$\mu$ is a baseline / reference input (black image / blur / mean / inpainted content).</li>
+  </ul>
+
+  <div class="remarque">
+    Explanations are conditional on the perturbation model $(\Phi,\mu)$.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>This is exactly like occlusion, but relaxed to a soft mask in [0,1].</li>
+      <li>Baseline choice is critical: it defines what “removing information” means.</li>
+      <li>In audio, baseline can be silence, spectral floor, or TF inpainting.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>From perturbations to a saliency map</h1>
+  <ul>
+    <li>We sample many masks $M^{(1)},\dots,M^{(N)}$.</li>
+    <li>We build perturbed inputs $\tilde x^{(n)}=\Phi(x,M^{(n)})$.</li>
+    <li>We evaluate the model outputs $Y^{(n)}=f(\tilde x^{(n)})$.</li>
+    <li>We estimate Sobol indices for each mask component $M_i$.</li>
+  </ul>
+
+  <div class="affirmation">
+    One importance score per region $\Rightarrow$ reshape into a grid $\Rightarrow$ heatmap.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>This slide explains where the heatmap comes from: ST_i is computed per patch.</li>
+      <li>Then we just “put back” ST_i on the corresponding spatial region and upsample for display.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Local Sobol importance (Total-order)</h1>
+  <ul>
+    <li>For a given region/feature $i$ (mask component $M_i$), we use the <b>total-order</b> Sobol index.</li>
+  </ul>
+
+  <center>
+    $$ST_i =
+    \frac{
+      \mathbb{E}_{M_{\sim i}}\left[\mathrm{Var}_{M_i}\left(Y \mid M_{\sim i}\right)\right]
+    }{
+      \mathrm{Var}(Y)
+    }$$
+  </center>
+
+  <div class="affirmation">
+    $ST_i$ captures the contribution of region $i$, including all interactions with other regions.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>This is the correct total-order formula: expectation of conditional variance.</li>
+      <li>Interpretation: fix all regions except i, vary only i, measure how much variability remains.</li>
+      <li>Deep models often rely on interactions (textures, shapes, harmonics) → total-order is safer than first-order.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Why total-order is the default in this paper</h1>
+  <ul>
+    <li><b>First-order</b> $S_i$ measures the isolated effect of region $i$.</li>
+    <li><b>Total-order</b> $ST_i$ measures everything that involves region $i$.</li>
+    <li>If $ST_i \gg S_i$, region $i$ mostly acts through <b>interactions</b>.</li>
+  </ul>
+
+  <div class="remarque">
+    For local saliency, interactions matter a lot (edges + context, harmonics + formants, etc.).
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>Good opportunity to connect to the product example in Part II: pure interaction can have S_i=0 but ST_i=1.</li>
+      <li>This is why interaction-aware explanations are very different from gradients.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Signed importance (optional)</h1>
+  <ul>
+    <li>Sobol indices are non-negative: they measure magnitude (how much it matters), not direction.</li>
+    <li>A simple signed variant attaches a sign using an occlusion test:</li>
+  </ul>
+
+  <center>
+    $$\mathrm{sign}_i=\mathrm{sign}\big(f(x)-f(x\setminus i)\big)$$
+    $$ST_i^{\Delta} = ST_i \cdot \mathrm{sign}_i$$
+  </center>
+
+  <div class="remarque">
+    The sign is baseline-dependent. The magnitude $ST_i$ is the robust part.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>You can skip this slide if you want to stay minimal.</li>
+      <li>Signed maps are useful for “supports vs contradicts” storytelling, but depend strongly on what “removal” means.</li>
+    </ul>
+  </aside>
+</section>
+
+
+<!-- ========================================================= -->
+<!-- V - Sobol Indices in Practice (Estimators) -->
+<!-- ========================================================= -->
+
+<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+  <h2 id="coverh2">V - Sobol Indices in Practice (Estimators)</h2>
+  <aside class="notes">
+    <ul>
+      <li>Now we need to compute ST_i efficiently with only black-box access to f.</li>
+      <li>Fel et al. use Jansen estimators + Quasi-Monte Carlo (Sobol sequences) to reduce estimator variance.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Why we need estimators</h1>
+  <ul>
+    <li>Definitions involve conditional expectations / high-dimensional integrals.</li>
+    <li>We want a <b>black-box</b> estimator using only evaluations of $f(\Phi(x,M))$.</li>
+    <li>Key trick: build pairs of perturbations that differ in <b>one component</b>.</li>
+  </ul>
+
+  <div class="remarque">
+    We will estimate the conditional variance term inside $ST_i$.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>We are approximating “vary only region i, keep others fixed” using structured sampling matrices.</li>
+      <li>This is where the A/B/C matrices come from.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Saltelli sampling: A, B, and mixed C</h1>
+  <ul>
+    <li>Sample two matrices of masks: $A,B\in[0,1]^{N\times d}$.</li>
+    <li>For each feature $i$, build $C^{(i)}$ by replacing column $i$ of $A$ with column $i$ of $B$.</li>
+  </ul>
+
+  <center>
+    $$C^{(i)} = (A_1,\dots,A_{i-1},B_i,A_{i+1},\dots,A_d)$$
+  </center>
+
+  <div class="remarque">
+    Evaluate $f(\Phi(x,\cdot))$ on $A$, $B$, and each $C^{(i)}$.
+  </div>
+  <div class="references" style="margin-top:1em;">
+	<ul>
+		<li>Saltelli, Andrea, et al. "Variance based sensitivity analysis of model output. Design and estimator for the total sensitivity index." <em>Computer physics communications 181.2</em>, 2010</li>
+	</ul>
+  </div>
+  <aside class="notes">
+    <ul>
+      <li>Great figure: draw A and B as two matrices, then show the “swap one column” operation.</li>
+      <li>Interpretation: A and C(i) differ only in region i → isolates feature i effect (including interactions).</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Jansen estimator: total-order</h1>
+  <ul>
+    <li>Estimate the output variance (using $A$):</li>
+  </ul>
+
+  <center>
+    $$\hat V = \frac{1}{N}\sum_{j=1}^N f(\Phi(x,A_j))^2
+    - \left(\frac{1}{N}\sum_{j=1}^N f(\Phi(x,A_j))\right)^2$$
+  </center>
+
+  <ul>
+    <li>Total-order estimator:</li>
+  </ul>
+
+  <center>
+    $$\widehat{ST}_i=\frac{1}{2N\hat V}\sum_{j=1}^N
+      \Big(f(\Phi(x,A_j))-f(\Phi(x,C^{(i)}_j))\Big)^2$$
+  </center>
+  <div class="references">
+	<ul>
+		<li>Jansen M.. Analysis of variance designs for model output. <em>
+			Computer Physics Communications</em>,1999</li>
+	</ul>
+  </div>
+  <aside class="notes">
+    <ul>
+      <li>Key point: squared differences measure sensitivity when only region i is switched.</li>
+      <li>The 1/(2N Vhat) normalization makes it a fraction of explained variance.</li>
+      <li>This estimator targets the “expected conditional variance” definition of ST_i.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Jansen estimator: first-order</h1>
+  <ul>
+    <li>First-order estimator:</li>
+  </ul>
+
+  <center>
+    $$\widehat{S}_i = 1-\frac{1}{2N\hat V}\sum_{j=1}^N
+      \Big(f(\Phi(x,B_j))-f(\Phi(x,C^{(i)}_j))\Big)^2$$
+  </center>
+
+  <div class="remarque">
+    In XAI, we typically visualize $\widehat{ST}_i$ as the main saliency map.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>First-order is useful pedagogically and for diagnosing interactions (ST much larger than S).</li>
+      <li>But in the paper, total-order is the main explanation map.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Computational cost</h1>
+  <ul>
+    <li>Evaluations required: $N(d+2)$ forward passes.</li>
+    <li>Typical setting in the paper: mask grid $11\times 11$ $\Rightarrow d=121$ and $N=32$:</li>
+  </ul>
+
+  <center>
+    $$32\times(121+2)=3936 \text{ forward passes}$$
+  </center>
+
+  <div class="affirmation">
+    Still feasible with batching on GPU.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>Compare to random masking methods: many more masks are needed for stable heatmaps.</li>
+      <li>Batching is crucial: we can evaluate all perturbed inputs as a batch.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Quasi-Monte Carlo (Sobol sequences)</h1>
+  <ul>
+    <li>Instead of i.i.d. Monte Carlo masks, use a <b>low-discrepancy</b> sequence.</li>
+    <li>Better coverage of $[0,1]^d$ $\Rightarrow$ lower estimator variance in practice.</li>
+  </ul>
+
+  <aside class="notes">
+    <ul>
+      <li>Very easy visual demo: random points vs Sobol points in 2D.</li>
+      <li>Main message: higher stability for the same budget.</li>
+    </ul>
+  </aside>
+  <div class="references">
+	<ul>
+		<li>Gerber M. On integration methods based on scrambled nets of arbitrary size. <em>Journal of Complexity,</em>
+2015</li>
+	</ul>
+  </div>
+</section>
+
+<!-- ========================================================= -->
+<!-- White-box vs Black-box explanations -->
+<!-- ========================================================= -->
+
+<section>
+  <h1>White-box vs Black-box explanations</h1>
+
+  <div class="affirmation">
+    In XAI, the evaluation protocol often depends on whether we have access to the model internals.
+  </div>
+
+  <ul>
+    <li><b>White-box</b> methods use gradients / internals:</li>
+    <ul>
+      <li>Examples: Saliency maps (∇), Integrated Gradients, Grad-CAM, LRP</li>
+      <li>Require access to model structure + backpropagation</li>
+    </ul>
+    <br>
+    <li><b>Black-box</b> methods use only model outputs:</li>
+    <ul>
+      <li>Examples: Occlusion, RISE, SHAP, <b>Sobol perturbation-based saliency</b></li>
+      <li>Only require forward passes: $f(x)$ queries</li>
+    </ul>
+  </ul>
+
+  <div class="remarque">
+    Black-box explanations are generally more expensive, but more model-agnostic.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>White-box: you can open the model and see inside (gradients, activations).</li>
+      <li>Black-box: you treat the model as an oracle: you query it and observe outputs.</li>
+      <li>Fel et al. is fully black-box: everything is estimated from forward passes.</li>
+      <li>Evaluation metrics we show next are also mostly black-box protocols.</li>
+    </ul>
+  </aside>
+</section>
+
+
+<!-- ========================================================= -->
+<!-- Pointing Game -->
+<!-- ========================================================= -->
+
+<section>
+  <h1>Evaluation #1: Pointing Game</h1>
+
+  <ul>
+    <li><b>Goal:</b> check whether the saliency map points to the object of interest.</li>
+    <li><b>Requires:</b> ground-truth object location (bounding box or segmentation mask).</li>
+    <li><b>Protocol:</b></li>
+    <ul>
+      <li>Compute a saliency map $S(x)\in\mathbb{R}^{H\times W}$</li>
+      <li>Find the most salient pixel / region:</li>
+      <center>
+        $$p^\star = \arg\max_{p} S_p(x)$$
+      </center>
+      <li><b>Hit</b> if $p^\star$ lies inside the ground-truth object mask / box</li>
+    </ul>
+  </ul>
+
+  <div class="affirmation">
+    Score = fraction of images where the explanation “points” inside the target object.
+  </div>
+
+  <div class="remarque">
+    Simple and intuitive, but only tests the single most salient point.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>Pointing game is like: “Where does the explanation look the most?”</li>
+      <li>It is very popular because it is simple and cheap to compute.</li>
+      <li>But it ignores the rest of the heatmap: only the maximum matters.</li>
+      <li>Also depends on annotation quality: bounding boxes may be too coarse.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Evaluation #1: Pointing Game</h1>
+ <center>
+	<img src="figures/images/eval1.png">
+ </center>
+</section>
+
+
+<!-- ========================================================= -->
+<!-- Deletion score -->
+<!-- ========================================================= -->
+
+<section>
+  <h1>Evaluation #2: Deletion score</h1>
+
+  <ul>
+    <li><b>Goal:</b> measure how “faithful” the saliency map is to the model decision.</li>
+    <li><b>Idea:</b> remove the most important pixels first and track the output drop.</li>
+    <li><b>Protocol:</b></li>
+    <ul>
+      <li>Rank pixels/regions by importance (descending): $p_1,p_2,\dots$</li>
+      <li>Create a sequence of perturbed inputs $x^{(k)}$ by deleting top-$k$ pixels</li>
+      <li>Track the score (e.g., class logit/probability) along the deletion path:</li>
+      <center>
+        $$s_k = f_c\!\left(x^{(k)}\right)$$
+      </center>
+    </ul>
+  </ul>
+
+  <div class="affirmation">
+    A good explanation yields a <b>fast decrease</b> of the target class score under deletion.
+  </div>
+
+  <ul>
+    <li><b>Typical metric:</b> Area Under the Curve (AUC) of $s_k$ vs. deleted fraction</li>
+    <li><b>Lower AUC</b> = more faithful (faster score collapse)</li>
+  </ul>
+
+  <aside class="notes">
+    <ul>
+      <li>Deletion answers: “If we remove what the explanation says is important, does the model fail?”</li>
+      <li>We can compute it for any black-box model, no gradients needed.</li>
+      <li>Important caveat: depends strongly on the deletion operator (baseline / blur / inpainting).</li>
+      <li>Deletion may create off-manifold samples: the model might behave strangely.</li>
+    </ul>
+  </aside>
+</section>
+<section>
+  <h1>Evaluation #2: Deletion score</h1>
+<center>
+	<img src="figures/images/eval2.png">
+</center>  
+</section>
+
+<section>
+  <h1>Fel et al. (2021): what to remember</h1>
+  <ul>
+    <li><b>Local Sobol saliency maps</b> are obtained by applying Sobol indices to a perturbation model.</li>
+    <li><b>Total-order maps</b> naturally capture interactions between regions.</li>
+    <li><b>QMC sampling</b> improves stability / convergence for a fixed evaluation budget.</li>
+    <li>Provides a principled “variance budget” view of explanations.</li>
+  </ul>
+
+
+  <aside class="notes">
+    <ul>
+      <li>Emphasize: the method is faithful to variance-based decomposition, not just heuristic masking.</li>
+    </ul>
+  </aside>
+</section>
+				<!-- ========================================================= -->
+				<!-- VI -->
+				<!-- ========================================================= -->
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">VI - What Sobol Explains (and What It Does Not)</h2>
+					<aside class="notes">
+						<ul>
+							<li>We now clarify what kind of “explanation” Sobol provides.</li>
+							<li>It’s sensitivity under a perturbation model — not causality.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Interpretation: sensitivity, not causality</h1>
+					<div class="affirmation">
+						Sobol-based explanations quantify <b>sensitivity</b> under a user-defined perturbation model.<br>
+						They do <b>not</b> provide causal explanations.
+					</div>
+					<ul>
+						<li>Depends on $p(M)$ (mask distribution) and $\Phi(x,M)$ (perturbation operator).</li>
+						<li>Depends on baseline $\mu$.</li>
+					</ul>
+
+					<aside class="notes">
+						<ul>
+							<li>Key message: explanations are conditional.</li>
+							<li>If you change baseline or perturbation model, you change the question you ask the model.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Limitations / pitfalls</h1>
+					<ul>
+						<li><b>Off-manifold:</b> perturbations may create unrealistic inputs.</li>
+						<li><b>Feature dependence:</b> classical Sobol assumes independent variables (true for masks; not always for raw features).</li>
+						<li><b>Granularity:</b> pixel vs superpixel vs patch changes the explanation.</li>
+						<li><b>Faithfulness metrics:</b> deletion/insertion depend on the perturbation protocol.</li>
+					</ul>
+					<div class="remarque">
+						Sobol is principled, but the explanation is conditional on modeling choices.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Important: in “real” images/audio, features are correlated; Sobol classic theory assumes independence.</li>
+							<li>Fel et al. partially bypass this by defining independent mask variables.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<!-- ========================================================= -->
+				<!-- Audio segment (optional but nice) -->
+				<!-- ========================================================= -->
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">Audio / Signal Segment (Why Sobol is natural here)</h2>
+					<aside class="notes">
+						<ul>
+							<li>Audio is interaction-heavy: time-frequency structure, harmonics, formants.</li>
+							<li>Sobol total-order naturally captures such joint effects.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Time-frequency features</h1>
+					<ul>
+						<li>Mixture: $x(t)=s(t)+n(t)$</li>
+						<li>STFT: $X(\omega,\tau)$</li>
+						<li>Mask TF regions:</li>
+					</ul>
+					<center>
+						$$\widetilde{X}(\omega,\tau)=M(\omega,\tau)\odot X(\omega,\tau)$$
+						$$Y = f(\widetilde{X})$$
+					</center>
+					<div class="remarque">
+						Feature can be a TF-bin, a TF-patch, or a frequency band.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>This matches your audio background: Sobol saliency can be presented as “which TF regions drive the model output”.</li>
+							<li>Good figure: show a spectrogram and an importance heatmap overlay.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Why interactions matter in audio</h1>
+					<ul>
+						<li>Speech/music structure:</li>
+						<ul>
+							<li>harmonics (correlated frequencies)</li>
+							<li>formants (bands)</li>
+							<li>time coherence (onsets/transients)</li>
+						</ul>
+						<li>Many features are informative only <b>jointly</b>.</li>
+					</ul>
+					<div class="affirmation">
+						Total-order Sobol indices capture these spectro-temporal interactions.
+					</div>
+
+					<aside class="notes">
+						<ul>
+							<li>Example: removing one harmonic alone may not hurt, but removing the harmonic structure does.</li>
+							<li>Sobol total-order attributes importance to bins that matter through joint structure.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>Spectrogram in audio</h1>
+					<center>
+						<img src="figures/images/spectro_sobol.png">
+					</center>
+
+					<div class="affirmation">
+						the word "friend" seems important (maybe the phoneme ?). some specific frequencies too.
+					</div>
+				</section>
+
+				<!-- ========================================================= -->
+				<!-- VII Take-home -->
+				<!-- ========================================================= -->
+				<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">VII - Take-Home Messages</h2>
+				</section>
+
+				<section>
+					<h1>Take-Home Messages</h1>
+					<ol>
+						<li><b>Feature importance must be defined</b>: it depends on “how you vary the input”.</li>
+						<li><b>Variance</b> is a principled sensitivity measure (scalar, stable, decomposable).</li>
+						<li><b>Sobol = functional ANOVA</b>: exact decomposition into main effects + interactions (under assumptions).</li>
+						<li><b>Total-order indices</b> are key in interaction-heavy models.</li>
+						<li><b>Local XAI</b>: apply Sobol to $g(M)=f(\Phi(x,M))$ using perturbation masks.</li>
+					</ol>
+
+					<aside class="notes">
+						<ul>
+							<li>End with the “conditional explanation” statement: Sobol explains sensitivity under a specific perturbation model.</li>
+							<li>If time: recap the interaction diagnostic $ST_i - S_i$.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<h1>References</h1>
+<div class="references">
+<ul>
+<li>Sobol, I. M. Global sensitivity indices for nonlinear mathematical models and their Monte Carlo estimates. <em>Mathematics and computers in simulation</em>, 2001</li>
+<li>Fel, Thomas, et al. "Look at the variance! efficient black-box explanations with sobol-based sensitivity analysis." <em>NeurIPS</em>, 2021</li>
+<li>Jansen M.. Analysis of variance designs for model output. <em>
+Computer Physics Communications</em>,1999</li>
+<li>Gerber M. On integration methods based on scrambled nets of arbitrary size. <em>Journal of Complexity,</em>
+2015</li>
+
+</ul>
+</div>
+
+
+				</section>
+</div>
+				<!-- Footer (keep inside .slides) -->
+				<div class="footer">
+					<img src="css/theme/img/logo-Telecom.svg" alt="Logo"/>
+					<div id="middlebox">Variance-Based Analysis - APM_5MV75_TP</div>
+				</div>
+
+			</div> <!-- end .slides -->
+		</div> <!-- end .reveal -->
+
+		<script src="js/reveal.js"></script>
+
+		<script>
+			Reveal.initialize({
+				controls: false,
+				progress: true,
+				history: true,
+				center: false,
+				slideNumber: true,
+				minScale: 0.1,
+				maxScale: 5,
+				transition: 'none',
+
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/math-katex/math-katex.js', async: true },
+					{ src: 'plugin/reveald3/reveald3.js' },
+					{ src: 'plugin/highlight/highlight.js', async: true }
+				]
+			});
+		</script>
+
+	</body>
+</html>
