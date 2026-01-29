@@ -1267,11 +1267,819 @@ Computer Physics Communications</em>,1999</li>
 
 
 				</section>
+
+<!-- ========================================================= -->
+        <!-- COVER -->
+        <!-- ========================================================= -->
+<section class="cover" data-background="figures/background-blur.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">XAI: Counterfactual explanations</h2>
+					<h1 id="title_seminar">MVA - APM_5MV75_TP</h1>
+					<h3>
+						<a href="https://matfontaine.github.io/APM_5MV75_TP" id="github_url">matfontaine.github.io/APM_5MV75_TP</a>
+					</h3>
+
+					<p id="coverauthors">
+						Mathieu FONTAINE<br />
+						mathieu.fontaine@telecom-paris.fr
+					</p>
+
+					<p id="date">January 2025</p>
+
+					<p>
+						<img src="css/theme/img/logo-Telecom.svg" id="telecom" class="logo" alt="">
+					</p>
+
+
+          <aside class="notes">
+            <ul>
+              <li>Goal: explain a prediction by answering: “what minimal changes would flip the decision?”</li>
+              <li>Focus today: DiCE = generate multiple diverse counterfactual explanations.</li>
+              <li>We keep the course MVA-style: optimization, constraints, metrics, limitations.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- OUTLINE -->
+        <!-- ========================================================= -->
+        <section>
+          <h1>Outline</h1>
+          <h2>I — Why counterfactuals?</h2>
+          <h2>II — Formal definition</h2>
+          <h2>III — Single counterfactual = optimization view</h2>
+          <h2>IV — DiCE: multiple diverse counterfactuals</h2>
+          <h2>V — Distances, constraints, mixed data</h2>
+          <h2>VI — Evaluation + limitations</h2>
+		  <h2>VII — App: Counterfactuals for medical image</h2>
+		  <h2>VIII — App: Counterfactuals in text-audio</h2>
+
+          <aside class="notes">
+            <ul>
+              <li>We’ll move from “one CF” to “set of CFs” + diversity.</li>
+              <li>We’ll emphasize actionability, constraints, and evaluation.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- I — Motivation -->
+        <!-- ========================================================= -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">I — Why Counterfactual Explanations?</h2>
+          <aside class="notes">
+            <ul>
+              <li>Counterfactuals are explanations in the form of actionable alternatives.</li>
+              <li>Different from “feature importance”: not “what mattered?”, but “what to change?”.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Explanation as “minimal change”</h1>
+          <ul>
+            <li>We have an instance $x$ and a model prediction $y=f(x)$.</li>
+            <li>We want a <b>new point</b> $c$ such that the decision becomes $y^\star$.</li>
+          </ul>
+
+		 <center>
+			<img src="figures/images/example_counterfactual.png" width="50%">
+		</center> 
+
+          <div class="affirmation">
+            Counterfactual = “a feasible input close to $x$ that flips the outcome”.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>Human-friendly: “If income was +5k€ and savings +2k€, loan would be approved”.</li>
+              <li>Useful for recourse: suggests changes.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Why one counterfactual is not enough</h1>
+          <ul>
+            <li>Many different changes can flip the decision.</li>
+            <li>We want <b>multiple</b> options to provide flexibility.</li>
+          </ul>
+          <div class="remarque">
+            For a given $x$, the set $\{c: f(c)=y^\star\}$ can be large and disconnected.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>Users may be unable/unwilling to change certain features.</li>
+              <li>Hence “diverse CFs”: different routes to the target outcome.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- II — Formal definition -->
+        <!-- ========================================================= -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">II — Formal Definition</h2>
+          <aside class="notes">
+            <ul>
+              <li>We keep this general: classifier or score model.</li>
+              <li>Then we’ll instantiate in optimization objectives.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Model + target outcome</h1>
+          <ul>
+            <li>Let $f:\mathbb{R}^D \to \mathcal{Y}$ be a black-box predictor.</li>
+            <li>Given an input $x\in\mathbb{R}^D$, we want $c\in\mathbb{R}^D$ such that:</li>
+          </ul>
+
+          <center>
+            $$f(c)=y^\star$$
+          </center>
+
+          <div class="remarque">
+            In practice: $f$ may output a probability/logit; we enforce $f(c)\ge \tau$ for some target threshold.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>For multiclass, y* is a class; for binary, y*=1 for “approved”.</li>
+              <li>Thresholding: ensures robust flip.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Core desiderata</h1>
+          <ul>
+            <li><b>Validity:</b> $c$ achieves the target outcome.</li>
+            <li><b>Proximity:</b> $c$ is close to $x$ (small change).</li>
+            <li><b>Feasibility / actionability:</b> respect constraints (<em>immutable features</em>).</li>
+            <li><b>Interpretability:</b> sparse changes preferred (<em>few features</em>).</li>
+          </ul>
+		  <center>
+		  <img src="figures/images/anim_counterfactual_dice.gif" width="70%">
+         </center> 
+		  <aside class="notes">
+            <ul>
+              <li>These are in tension: smaller proximity may conflict with feasibility or sparsity.</li>
+              <li>DiCE focuses also on “diversity” for sets of counterfactuals.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- III — Single counterfactual as optimization -->
+        <!-- ========================================================= -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">III — Single Counterfactual: Optimization View</h2>
+          <aside class="notes">
+            <ul>
+              <li>First: one CF, standard formulation: minimize distance subject to flipping.</li>
+              <li>Then: relax constraints into loss.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Constrained formulation</h1>
+          <ul>
+            <li>Minimal change subject to achieving the target:</li>
+          </ul>
+
+          <center>
+            $$\min_{c\in\mathcal{C}} \; d(c,x) \quad \text{s.t.}\quad f(c)=y^\star$$
+          </center>
+
+          <div class="remarque">
+            $\mathcal{C}$ encodes feasibility: immutable features, box constraints, categorical constraints.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>This is a generic “projection to decision set” problem.</li>
+              <li>Hard constraint can be relaxed for gradient-based optimization.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Relaxed (penalized) formulation</h1>
+          <ul>
+            <li>Convert constraint to a loss term:</li>
+          </ul>
+
+          <center>
+            $$\min_{c\in\mathcal{C}}\; \lambda \,\ell\big(f(c),y^\star\big) + d(c,x)$$
+          </center>
+
+          <div class="remarque">
+            $\ell$ can be hinge-like on the target class probability (or cross-entropy on $y^\star$).
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>Typical trick: if model returns score s(c), enforce s(c) >= tau using hinge loss.</li>
+              <li>Many CF methods are variants of this optimization.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Discrete / categorical constraints</h1>
+          <ul>
+            <li>Some features are categorical ({CDI, CDD, FreeLancer}) (one-hot) or ordinal {Bac < Bachelor < Master < PhD} or continuous {salary etc.}.</li>
+            <li>Practical solutions:</li>
+            <ul>
+              <li>continuous relaxation (categories becomes real) + projection (on category space)</li>
+              <li>heuristic search (beam search, simulated annealing etc.)</li>
+              <li>optimize in a continuous latent space of a generator</li>
+            </ul>
+          </ul>
+
+          <aside class="notes">
+            <ul>
+              <li>DiCE provides practical handling for mixed data via tailored distance + postprocessing.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- IV — DiCE -->
+        <!-- ========================================================= -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">IV — DiCE: Diverse Counterfactual Explanations</h2>
+          <aside class="notes">
+            <ul>
+              <li>Now the key: produce K counterfactuals at once.</li>
+              <li>We add an explicit diversity term. This is the paper’s main novelty.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>K counterfactuals</h1>
+          <ul>
+            <li>Find $\mathcal{C}=\{c_1,\dots,c_K\}$ such that each $c_k$ is valid and close.</li>
+            <li>Additionally: counterfactuals should be <b>diverse</b>.</li>
+          </ul>
+
+          <center>
+            $$f(c_k)=y^\star,\quad k=1,\dots,K$$
+          </center>
+
+          <div class="affirmation">
+            Diversity gives multiple “paths” to reach the desired outcome.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>Example: either change income, or reduce debt, or extend employment duration…</li>
+              <li>Users can pick the most feasible explanation.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>DiCE objective in a nutshell</h1>
+          <ul>
+            <li>Optimize all CFs jointly:</li>
+          </ul>
+
+          <center>
+            $$\min_{c_1,\dots,c_K\in\mathcal{C}} \;\;
+            \sum_{k=1}^K \Big[ \lambda\,\ell(f(c_k),y^\star) + d(c_k,x)\Big]
+            \;-\; \eta \cdot \mathrm{Diversity}(c_1,\dots,c_K)$$
+          </center>
+
+
+          <aside class="notes">
+            <ul>
+              <li>This is the standard CF loss + a repulsion/spread term.</li>
+              <li>The paper uses a DPP-style determinant-based diversity.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>DPP-style diversity (determinant)</h1>
+          <ul>
+            <li>Define a similarity kernel between counterfactuals, e.g. RBF:</li>
+          </ul>
+
+          <center>
+            $$K_{ij}=\exp\!\left(-\frac{\|c_i-c_j\|_2^2}{\sigma^2}\right)$$
+          </center>
+
+          <ul>
+            <li>Diversity proxy:</li>
+          </ul>
+
+          <center>
+            $$\mathrm{Diversity}(c_1,\dots,c_K)=\det(K)$$
+          </center>
+
+          <div class="remarque">
+            $\det(K)$ is large when points are dissimilar (spread out).
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>Intuition: if two CFs are identical, kernel rows become dependent → det small.</li>
+              <li>Determinant encourages “orthogonal-ish” set → spread.</li>
+              <li>We don’t need full DPP theory; determinant as a diversity score is enough.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Practical note: gradients</h1>
+          <ul>
+            <li>If $f$ is differentiable (NN), optimize by gradient descent in input space.</li>
+            <li>If $f$ is non-differentiable, DiCE can use model-agnostic search / sampling.</li>
+          </ul>
+
+          <div class="remarque">
+            Differentiable optimization is fast but can produce off-manifold counterfactuals.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>In practice you often constrain or regularize to avoid unrealistic CFs.</li>
+              <li>We’ll discuss feasibility and manifold issues in Part VI.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- V — Distances & constraints -->
+        <!-- ========================================================= -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">V — Distances, Constraints, Mixed Data</h2>
+          <aside class="notes">
+            <ul>
+              <li>The choice of distance d(.,.) is not cosmetic: it defines what “minimal change” means.</li>
+              <li>For mixed data, we must treat categorical features properly.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Continuous features: robust scaling (MAD)</h1>
+          <ul>
+            <li>For continuous features, normalize by median absolute deviation (MAD):</li>
+          </ul>
+
+          <center>
+            $$d_{\text{cont}}(c,x)=\sum_{j\in \mathcal{J}_{\text{cont}}}\frac{|c_j-x_j|}{\mathrm{MAD}_j}$$
+          </center>
+
+          <div class="remarque">
+            MAD is more robust than standard deviation (less sensitive to outliers).
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>This is important in tabular data: different scales (income vs age).</li>
+              <li>Using raw L2 can be meaningless if features have different units.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Categorical features: mismatch penalty</h1>
+          <ul>
+            <li>For one-hot encoded categorical features:</li>
+          </ul>
+
+          <center>
+            $$d_{\text{cat}}(c,x)=\sum_{j\in \mathcal{J}_{\text{cat}}} \mathbf{1}[c_j \neq x_j]$$
+          </center>
+
+          <div class="remarque">
+            Enforce valid one-hot vectors via projection (argmax) or constraints.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>If you relax one-hot to continuous, you must project back (otherwise infeasible categories).</li>
+              <li>Some implementations treat categorical as immutable to avoid invalid states.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Immutable / actionable constraints</h1>
+          <ul>
+            <li>Partition features into:</li>
+            <ul>
+              <li>immutable: cannot change (e.g., age, past defaults)</li>
+              <li>actionable: can change (e.g., savings, debt)</li>
+              <li>conditionally actionable: changes allowed only in one direction</li>
+            </ul>
+          </ul>
+
+          <center>
+            $$c_j = x_j \;\;\text{for } j\in\mathcal{J}_{\text{immut}}$$
+          </center>
+
+          <aside class="notes">
+            <ul>
+              <li>This is essential: otherwise explanations can be unethical/unrealistic.</li>
+              <li>Also prevents trivial solutions like “change race / gender”.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Sparsity</h1>
+          <ul>
+            <li>Interpretability often requires changing few features.</li>
+            <li>Proxy: encourage sparse deltas $\Delta = c-x$ via $\ell_1$ penalty:</li>
+          </ul>
+
+          <center>
+            $$d(c,x) \;+\; \gamma \|\;c-x\;\|_1$$
+          </center>
+
+          <div class="remarque">
+            Alternative: post-process CFs to keep only the largest changes.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>True sparsity is L0, but L1 is a convex proxy.</li>
+              <li>For discrete features, “number of changed features” is more direct.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VI — Evaluation + limitations -->
+        <!-- ========================================================= -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">VI — Evaluation and Limitations</h2>
+          <aside class="notes">
+            <ul>
+              <li>How do we compare counterfactual methods?</li>
+              <li>And what can go wrong: feasibility, realism, causality, manifold issues.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Standard evaluation metrics</h1>
+          <ul>
+            <li><b>Validity:</b> fraction of CFs achieving the target.</li>
+            <li><b>Proximity:</b> average distance $d(c_k,x)$.</li>
+            <li><b>Diversity:</b> determinant-based or pairwise distance statistics.</li>
+            <li><b>Sparsity:</b> average number of changed features.</li>
+          </ul>
+
+          <aside class="notes">
+            <ul>
+              <li>These metrics can be optimized but also reported for comparison.</li>
+              <li>Diversity is crucial when K>1; otherwise CFs collapse to the same solution.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Local decision boundary approximation (intuition)</h1>
+          <ul>
+            <li>Counterfactuals approximate the local boundary around $x$.</li>
+            <li>One can fit a simple surrogate near $x$ (e.g., 1-NN on generated samples).</li>
+          </ul>
+
+          <div class="remarque">
+            Idea: evaluate how well CFs “cover” different boundary directions locally.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>This connects CFs with local explanation fidelity: are we really exploring the neighborhood?</li>
+              <li>Good to mention, but keep details light unless you want extra depth.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Main limitations</h1>
+          <ul>
+            <li><b>Off-manifold:</b> CFs can be unrealistic (not resembling real data).</li>
+            <li><b>Feature dependence:</b> changing one feature may require changing others.</li>
+            <li><b>Causality:</b> actionable recourse should respect causal relations.</li>
+            <li><b>Multiple solutions:</b> must balance proximity vs diversity vs sparsity.</li>
+          </ul>
+
+          <div class="affirmation">
+            Counterfactuals are “action suggestions” only under a chosen feasibility model.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>Emphasize: CFs are not causal explanations unless constraints encode causality.</li>
+              <li>Connecting to MVA: this is about optimization under constraints, not truth.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TAKE HOME -->
+        <!-- ========================================================= -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">Take-Home Messages</h2>
+          <aside class="notes">
+            <ul>
+              <li>Wrap-up: definition, optimization, diversity, constraints, pitfalls.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Take-Home Messages</h1>
+          <ol>
+            <li>Counterfactuals explain by giving <b>changes</b> that flip the outcome.</li>
+            <li>Mathematically: solve a <b>constrained optimization</b> (validity + proximity).</li>
+            <li>DiCE: generate <b>K</b> CFs and add a <b>diversity</b> term (determinant / DPP-style).</li>
+            <li>Mixed data + constraints are central (actionability, immutability, categorical).</li>
+            <li>CFs are only meaningful under an explicit <b>feasibility model</b>.</li>
+          </ol>
+
+          <aside class="notes">
+            <ul>
+              <li>Encourage students to always state distance + constraints + target threshold.</li>
+              <li>Next step: connect to recourse and causal constraints.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>References</h1>
+          <ul>
+            <li><b>DiCE:</b> Mothilal, Sharma, Tan. “Explaining ML Classifiers through Diverse Counterfactual Explanations.” FAT* 2020.</li>
+            <li>(Optional background) Wachter et al. “Counterfactual explanations without opening the black box.” 2017.</li>
+          </ul>
+        </section>				
+
+<!-- ========================================================= -->
+<!-- Application (Images) - Diffusion Autoencoder Counterfactuals -->
+<!-- Based on: Atad et al. 2024 (DAE) -->
+<!-- ========================================================= -->
+
+<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+  <h2 id="coverh2">Application (Images) — Counterfactuals via Diffusion Autoencoder <span style="font-family:monospace;">[Atad et al., 2024]</span></h2>
+  <aside class="notes">
+    <ul>
+      <li>Goal: generate counterfactual medical images that remain realistic by moving in a generative latent space.</li>
+      <li>Key idea: do counterfactuals in the latent space of a diffusion autoencoder (unsupervised), then add a simple linear classifier/regressor on top.</li>
+      <li>Why MVA-friendly: geometry in latent space + hyperplane distance + controlled traversal across decision boundary.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Problem setting (medical imaging)</h1>
+  <center>
+  <img src="figures/images/image_counterfactual.png" width="80%">
+</center>  
+  <ul>
+    <li>We have an image classifier / regressor: <b>what minimal change flips the decision?</b></li>
+    <li>We want counterfactual image <b>$x_{cf}$</b> such that:</li>
+  </ul>
+  <center>
+    $$\text{(flip)}\quad f(x_{cf}) \neq f(x) \qquad \text{and}\qquad \text{(realism)}\quad x_{cf}\sim p_{\text{data}}$$
+  </center>
+  <div class="remarque">
+    Pixel-space optimization often produces adversarial-like artifacts. Generative latent spaces help keep edits on-manifold.
+  </div>
+  <div class="references">
+	<ul>
+		<li>Matan Atad et al., Counterfactual Explanations for Medical Image Classification and Regression using Diffusion Autoencoder, JMLBI, 2024</li>
+	</ul>
+  </div>
+  <aside class="notes">
+    <ul>
+      <li>Remind difference with adversarial examples: adversarial can be imperceptible but off-manifold; counterfactual aims to be plausible and semantically meaningful.</li>
+      <li>In medical imaging, plausibility is critical for clinician trust.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Diffusion Autoencoder (DAE) as unsupervised feature extractor</h1>
+  <ul>
+    <li>Train a DAE on unlabeled images → semantic latent space <b>z<sub>sem</sub></b>.</li>
+    <li>DAE learns a compressed representation where interpolations are meaningful.</li>
+  </ul>
+  <center>
+    $$x \xrightarrow{\text{encoder}} z_{\mathrm{sem}} \in \mathbb{R}^m \qquad\qquad \hat x = \text{decode}(z_{\mathrm{sem}}, \text{(stochastic latent)})$$
+  </center>
+  <div class="affirmation">
+    Unsupervised training → same latent space can support multiple downstream tasks (classification + ordinal regression).
+  </div>
+  <aside class="notes">
+    <ul>
+      <li>From the paper: DAE has a semantic encoder that yields z_sem; decoding uses conditional diffusion to reconstruct.</li>
+      <li>Take-home: CE generation becomes a latent edit + decode, instead of directly editing pixels.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Linear decision boundary in latent space</h1>
+  <ul>
+    <li>Encode labeled samples: $w = z_{\mathrm{sem}}(x)$</li>
+    <li>Fit a linear classifier (SVM / linear layer): hyperplane</li>
+
+  </ul>
+  <center>
+    $$\mathcal{P}:\quad n^\top w + b = 0$$
+    $$\text{signed distance:}\quad \mathrm{dist}(w,\mathcal{P})=\frac{n^\top w + b}{\|n\|}$$
+  </center>
+  <ul>
+		<li>$n:$ semantic direction corresponsing to the pathology existence</li>
+	<li>$b:$ bias term</li>
+  </ul>
+  <div class="remarque">
+    The vector <b>n</b> becomes a <b>semantic direction</b> for the pathology.
+  </div>
+  <aside class="notes">
+    <ul>
+      <li>This is the key geometric ingredient: you now have a direction that corresponds to “more pathology” vs “more healthy”.</li>
+      <li>Distance to hyperplane can be used as a continuous severity proxy (then calibrate to ordinal grades).</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Binary counterfactual = reflect across hyperplane</h1>
+  <ul>
+    <li>Given latent code <b>w</b>, the paper proposes a closed-form CE in latent space.</li>
+  </ul>
+  <center>
+    $$w_{cf} = w - 2\cdot \mathrm{dist}(w,\mathcal{P})\;\frac{n}{\|n\|}$$
+  </center>
+  <ul>
+    <li>Then decode: $$x_{cf} = \mathrm{decode}(w_{cf})$$</li>
+  </ul>
+  <div class="affirmation">
+    CE is an <b>on-manifold</b> semantic edit: flip class while staying realistic.
+  </div>
+  <aside class="notes">
+    <ul>
+      <li>Geometric intuition: reflection keeps the same distance to boundary but on the other side.</li>
+      <li>This is much cleaner than iterative pixel optimization; the generative model enforces realism.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Ordinal counterfactuals(severity progression)</h1>
+
+  <ul>
+
+    <li>
+      <b>Severity measure</b>:
+      severity is defined as the signed distance to the hyperplane
+      $$
+        \text{dist}(w,P) = \frac{n^\top w + b}{\|n\|}
+      $$
+    </li>
+
+    <li>
+      <b>Calibration to ordinal grades</b>:
+      $$
+        \text{grade}(w) \approx \alpha\,\text{dist}(w,P) + \beta
+      $$
+    </li>
+
+    <li>
+      <b>Controlled severity traversal</b>:
+      we explicitly parametrize a latent trajectory along the normal direction
+      $$
+        w(t) = w_0 + t\,\frac{n}{\|n\|}
+      $$
+    </li>
+
+    <li>
+      <b>Key property</b>:
+      along this path,
+      $$
+        \text{dist}(w(t),P) = \text{dist}(w_0,P) + t
+      $$
+      $\Rightarrow$ increasing $t$ increases severity <i>linearly</i>.
+    </li>
+
+    <li>
+      <b>Counterfactual generation</b>:
+      decoded images form a smooth severity progression
+      $$
+        x(t) = \text{decode}(w(t))
+      $$
+    </li>
+  </ul>
+</section>
+
+
+
+<section>
+  <h1>Results of the generator</h1>
+  <center>
+  <img src="figures/images/eval1-image-Counterfactual.png">
+<img src="figures/images/eval1-1-image-counterfactual.png">
+</center>
+  <aside class="notes">
+    <ul>
+      <li>sometimes hallucinations appear when moving too far in latent space.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Results of the generator</h1>
+  <center>
+  <img src="figures/images/eval1-image-Counterfactual.png">
+<img src="figures/images/eval1-1-image-counterfactual.png">
+</center>
+  <aside class="notes">
+    <ul>
+      <li>sometimes hallucinations appear when moving too far in latent space.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Results of accuracy, grade etc.</h1>
+  <center>
+  <img src="figures/images/eval2-image-counterfactual.png">
+  <aside class="notes">
+    <ul>
+      <li>sometimes hallucinations appear when moving too far in latent space.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Limitations</h1>
+  <ul>
+    <li><b>Linearity assumption</b>: a single hyperplane direction may not match complex pathologies.</li>
+    <li><b>Confounders in latent space</b>: “move to healthy” may introduce spurious anatomical changes (bias).</li>
+    <li><b>Calibration</b>: mapping distance→grade can be imperfect (especially under label scarcity / imbalance).</li>
+  </ul>
+  <div class="affirmation">
+    Counterfactuals are only as good as (i) the generative model, (ii) the latent geometry, (iii) the downstream classifier.
+  </div>
+  <aside class="notes">
+    <ul>
+      <li>Strong MVA message: this is geometry + representation learning + simple supervised layer.</li>
+      <li>Counterfactuals become a tool for diagnosing model bias (not only explaining decisions).</li>
+    </ul>
+  </aside>
+</section>
+
+<!-- ========================================================= -->
+<!-- Application (Audio) - Counterfactual Natural Language -->
+<!-- Based on: Vosoughi et al. ICASSP 2024 -->
+<!-- ========================================================= -->
+
+<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+  <h2 id="coverh2">Application (Audio) — Learning with Counterfactual Captions <span style="font-family:monospace;">[Vosoughi et al., 2024]</span></h2>
+  <aside class="notes">
+    <ul>
+      <li>Switch domain: here counterfactuals are used during representation learning, not only for explaining a fixed classifier.</li>
+      <li>Idea: build counterfactual captions (text) for the same audio and enforce the embedding geometry to separate factual vs counterfactual descriptions.</li>
+      <li>Why it matters: many “alternative scenarios” are hard/unsafe/impossible to record (gunshot vs firework in same context).</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Main idea</h1>
+  <center>
+<img src="figures/images/audio_counterfactual.png">
+</center>
+</section>
+
+<section>
+  <h1>Can be a chosen paper for the evaluation ! </h1>
+  <div class="references">
+	<ul>
+		<li>Ali. Vosoughi et al,LEARNING AUDIO CONCEPTS FROM COUNTERFACTUAL NATURAL LANGUAGE, ICASSP, 2024 </li>
+	</ul>
+  </div>
+</section>
+
+
+
+
 </div>
 				<!-- Footer (keep inside .slides) -->
 				<div class="footer">
 					<img src="css/theme/img/logo-Telecom.svg" alt="Logo"/>
-					<div id="middlebox">Variance-Based Analysis - APM_5MV75_TP</div>
+					<div id="middlebox">Variance-Based / Counterfactual / Prototype  - APM_5MV75_TP</div>
 				</div>
 
 			</div> <!-- end .slides -->
