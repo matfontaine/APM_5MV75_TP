@@ -2073,13 +2073,862 @@ Computer Physics Communications</em>,1999</li>
 </section>
 
 
+ <section class="cover" data-background="figures/background-blur.png" data-state="no-title-footer no-progressbar has-dark-background">
+					<h2 id="coverh2">XAI: Prototypical Networks</h2>
+					<h1 id="title_seminar">MVA - APM_5MV75_TP</h1>
+					<h3>
+						<a href="https://matfontaine.github.io/APM_5MV75_TP" id="github_url">matfontaine.github.io/APM_5MV75_TP</a>
+					</h3>
+
+					<p id="coverauthors">
+						Mathieu FONTAINE<br />
+						mathieu.fontaine@telecom-paris.fr
+					</p>
+
+					<p id="date">February 2025</p>
+
+					<p>
+						<img src="css/theme/img/logo-Telecom.svg" id="telecom" class="logo" alt="">
+					</p>
+          <aside class="notes">
+            <ul>
+              <li>Goal: explain predictions by comparisons to learned prototypes.</li>
+              <li>Connect to kNN, metric learning, counterfactuals, and robustness.</li>
+              <li>We focus on the math: objectives, gradients, and a few clean propositions.</li>
+            </ul>
+          </aside>
+        </section>
+
+
+
+        <section>
+          <h1>Why prototypes?</h1>
+          <ul>
+            <li>Standard deep nets rely on abstract latent features.</li>
+            <li>Prototype nets explain by <b>analogy</b>: “this looks like that”.</li>
+            <li>Interpretability is <b>intrinsic</b> (part of the model), not post-hoc.</li>
+          </ul>
+          <center>
+          <img src="figures/images/proto1.png" width="70%">
+          </center>
+          <div class="affirmation">
+            We build a model where logits are sums of similarities to learned prototypes.
+          </div>
+          <div class="references">
+            <ul>
+              <li>Snell et al. Prototypical Networks for Few Shot Learning, NIPS 2017</li>
+            </ul>
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>Good to contrast with gradients/SHAP: here explanations are example-based.</li>
+              <li>Prototype = representative pattern in a learned metric space.</li>
+            </ul>
+          </aside>
+        </section>
+        <section>
+          <h1>Outline</h1>
+          <h2>I — Motivations</h2>
+          <h2>II — Prototypical networks: $\texttt{[Sne. 17]}$</h2>
+          <h2>III — ProtoPNet: patch prototypes $\texttt{[Che. 19]}$</h2>
+          <h2>IV - Prototypical and Counterfactual</h2>
+          <h2>V — Prototypes in Sound Classification $\texttt{[Zin. 21]}$</h2>
+          <h2>VI — take-home</h2>
+
+          <div class="references">
+            <ul>
+              <li>Snell et al. Prototypical Networks for Few Shot Learning, NIPS 2017</li>
+              <li>Chen et al. This Looks Like That: Deep Learning for Interpretable Image Recognition, NeurIPS 2019</li>  
+              <li>Zinemanas et al. An Interpretable Deep Learning Model for Automatic
+Sound Classification, Electronics, 2021.</li>
+            </ul>
+          </div>        
+          <aside class="notes">
+            <ul>
+              <li>We will prove 3–5 short propositions; full proofs in the .tex handout.</li>
+              <li>Notebook TP: implement prototypical classifier + prototype projection + explain a few test samples.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- II -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">II — Prototypical networks: $\texttt{[Sne. 17]}$</h2>
+        </section>
+
+        <section>
+          <h2>II – Prototypical Networks</h2>
+          <h3>Few-shot classification setting</h3>
+
+          <ul>
+            <li>We consider an <b>episodic learning</b> setup.</li>
+            <li>Each episode mimics a few-shot task.</li>
+          </ul>
+
+          <center>
+            Support set:
+            $S = \{(x_i, y_i)\}_{i=1}^N,\quad y_i \in \{1,\dots,K\}$
+          </center>
+
+          <center>
+            $S_k = \{x_i : y_i = k\}$
+          </center>
+
+          <aside class="notes">
+            <ul>
+              <li>Key idea: train and test conditions must match.</li>
+              <li>Episodes are small classification problems.</li>
+            </ul>
+          </aside>
+        </section>
+        <section>
+          <h3>Learning an embedding</h3>
+
+          <ul>
+            <li>Inputs are mapped to a representation space:</li>
+          </ul>
+
+          <center>
+            $f_\phi : \mathbb{R}^D \to \mathbb{R}^M$
+          </center>
+
+          <ul>
+            <li>$f_\phi$ is a neural network (CNN, ResNet, …)</li>
+            <li>All reasoning happens in the embedding space</li>
+          </ul>
+
+          <aside class="notes">
+            <ul>
+              <li>Non-linearity is entirely in the embedding.</li>
+              <li>The classifier itself will be very simple.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h3>Class prototypes</h3>
+
+          <ul>
+            <li>Each class is represented by a <b>prototype</b>.</li>
+          </ul>
+
+          <center>
+            $$
+            c_k = \frac{1}{|S_k|} \sum_{(x_i,y_i)\in S_k} f_\phi(x_i)
+            $$
+          </center>
+
+          <div class="affirmation">
+            A prototype is the <b>mean embedding</b> of support examples.
+          </div>
+
+          <aside class="notes">
+            <ul>
+              <li>This is not a heuristic: it will be justified mathematically.</li>
+              <li>One prototype per class.</li>
+            </ul>
+          </aside>
+        </section>
+
+
+      <section>
+    <h3>Classification rule</h3>
+
+    <ul>
+      <li>Given a query point $x$:</li>
+    </ul>
+
+    <center>
+      $$
+      p_\phi(y=k\mid x)
+      =
+      \frac{\exp\big(-d(f_\phi(x), c_k)\big)}
+      {\sum_{k'} \exp\big(-d(f_\phi(x), c_{k'})\big)}
+      $$
+    </center>
+
+    <ul>
+      <li>$d(\cdot,\cdot)$ is a distance in embedding space</li>
+    </ul>
+
+    <aside class="notes">
+      <ul>
+        <li>This is a soft nearest-prototype classifier.</li>
+        <li>All classes compete via distances.</li>
+      </ul>
+    </aside>
+  </section>
+
+<section>
+  <h3>Episodic training objective</h3>
+
+  <ul>
+    <li>Minimize negative log-likelihood on queries:</li>
+  </ul>
+
+  <center>
+    $$
+    \mathcal{L}(\phi)
+    =
+    - \log p_\phi(y=k \mid x)
+    $$
+  </center>
+
+  <ul>
+    <li>Episodes are sampled during training</li>
+    <li>SGD on $\phi$</li>
+  </ul>
+
+  <aside class="notes">
+    <ul>
+      <li>Same embedding used for support and query.</li>
+      <li>No fine-tuning at test time.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h3>Why is the prototype the mean?</h3>
+
+  <ul>
+    <li>Assume the distance is a <b>Bregman divergence</b> ($\phi$ strictly convex on a convex domain).</li>
+  </ul>
+
+  <center>
+    $$
+    d_\varphi(z,z')
+    =
+    \varphi(z) - \varphi(z') - (z-z')^\top \nabla\varphi(z')
+    $$
+  </center>
+
+  <div class="affirmation">
+    For Bregman divergences, the cluster representative minimizing
+    $\sum_i d(z_i, c)$ is the <b>mean</b>.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>Classic result from Banerjee et al. (2005).</li>
+      <li>This is the core theoretical justification.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h3>Connection to mixture models</h3>
+
+  <ul>
+    <li>Exponential family density:</li>
+  </ul>
+
+  <center>
+    $$
+    p(z\mid\theta)
+    =
+    \exp\{-d_\varphi(z,\mu(\theta)) - g(z)\}
+    $$
+  </center>
+
+  <ul>
+    <li>One component per class</li>
+    <li>Equal mixture weights</li>
+  </ul>
+
+  <aside class="notes">
+    <ul>
+      <li>Inference = soft assignment to clusters.</li>
+      <li>ProtoNet ≈ discriminative mixture model.</li>
+    </ul>
+  </aside>
+</section>
+
+
+<section>
+  <h3>Squared Euclidean distance</h3>
+
+  <center>
+    $$
+    d(z,c) = \|z-c\|^2
+    $$
+  </center>
+
+  <ul>
+    <li>Corresponds to spherical Gaussian clusters</li>
+    <li>Prototype = empirical mean</li>
+  </ul>
+
+  <aside class="notes">
+    <ul>
+      <li>This choice works best empirically.</li>
+      <li>Cosine distance breaks the theory.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h3>Equivalence to a linear classifier</h3>
+
+  <center>
+    $$
+    -\|f(x)-c_k\|^2
+    =
+    2c_k^\top f(x) - \|c_k\|^2 + \text{const}
+    $$
+  </center>
+
+  <center>
+    $$
+    = w_k^\top f(x) + b_k
+    $$
+  </center>
+
+  <div class="affirmation">
+    ProtoNet = linear classifier on learned embeddings
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>All non-linearity is in $f_\phi$.</li>
+      <li>Classifier head is extremely simple.</li>
+    </ul>
+  </aside>
+</section>
+
+
+<section>
+  <h3>Few-shot terminology and datasets</h3>
+
+  <ul>
+    <li><b>N-way</b>: number of classes in a classification episode</li>
+    <li><b>K-shot</b>: number of labeled examples per class</li>
+  </ul>
+
+  <center>
+    An episode = N-way K-shot classification task
+  </center>
+
+  <ul>
+    <li><b>Omniglot</b>: handwritten characters, many classes, low intra-class variability</li>
+    <li><b>miniImageNet</b>: natural images, fewer classes, high variability</li>
+  </ul>
+
+  <aside class="notes">
+    <ul>
+      <li>Important: “way” refers to the task, not the dataset size.</li>
+      <li>Few-shot learning is about learning to solve new tasks.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h3>Experimental validation (ProtoNet)</h3>
+
+  <ul>
+    <li>Benchmarks: <b>Omniglot</b> and <b>miniImageNet</b></li>
+    <li>Few-shot classification tasks:</li>
+    <ul>
+      <li>$N$-way, $K$-shot (e.g. 5-way 1-shot, 5-way 5-shot)</li>
+    </ul>
+    <li>Episodic training and testing</li>
+  </ul>
+
+  <center>
+    Support set → prototypes → softmax over distances
+  </center>
+
+  <div class="remarque">
+    No fine-tuning at test time, only prototype computation.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>Stress that train/test tasks have the same structure.</li>
+      <li>This avoids the usual train–test mismatch in few-shot learning.</li>
+      <li>The simplicity of inference is part of the contribution.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h3>Results</h3>
+  <img src="figures/images/proto2.png">
+  <img src="figures/images/proto3.png">
+
+
+  <aside class="notes">
+    <ul>
+      <li>This slide closes the theory → practice loop.</li>
+      <li>Distance choice is not cosmetic: it encodes assumptions.</li>
+      <li>Nice example where theory predicts empirical behavior.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h3>Key takeaways</h3>
+
+  <ul>
+    <li>Classification via distances to prototypes</li>
+    <li>Prototype = mean (theoretically optimal)</li>
+    <li>Distance choice encodes distributional assumptions</li>
+    <li>Model is simple, stable, and interpretable</li>
+  </ul>
+
+  <div class="affirmation">
+    Simplicity is the inductive bias.
+  </div>
+</section>
+
+<section>
+  <h3>Why ProtoNets matter for interpretability</h3>
+
+  <ul>
+    <li>Each decision is explained by distances to class prototypes</li>
+    <li>Prototypes live in the same space as data embeddings</li>
+    <li>No opaque classifier head</li>
+  </ul>
+
+  <div class="affirmation">
+    Interpretability is <b>intrinsic</b>, not post-hoc.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>This contrasts with gradient or perturbation-based explanations.</li>
+      <li>ProtoPNet will push this idea further with patch-level prototypes.</li>
+    </ul>
+  </aside>
+</section>
+        <!-- III -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">III — ProtoPNet: patch prototypes $\texttt{[Che. 19]}$</h2>
+        </section>
+
+        <section>
+          <h1>Patch embedding map</h1>
+          <ul>
+            <li>Backbone (ResNet, VGG ...) outputs feature map: $F_\theta(x)\in\mathbb{R}^{H\times W\times d}$</li>
+            <li>d: channel number</li>
+            <li>Patch vectors: $z_{ij}(x)\in\mathbb{R}^d$</li>
+          </ul>
+          <img src="figures/images/proto4.png">
+          <div class="remarque">
+            A prototype corresponds to a <b>patch</b> pattern (beak, wheel, texture...), not the whole image.
+          </div>
+          <aside class="notes">
+            <ul>
+              <li>Show a figure here: feature map grid + one prototype matching to one cell.</li>
+              <li>Explain: interpretability comes from localizing which patch activated which prototype.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Matching: max over patches</h1>
+          <center>
+            $$
+            s_k(x)=\max_{i,j}\; -\|z_{ij}(x)-p_k\|_2^2
+            $$
+          </center>
+          <div class="remarque">
+            Non-smooth due to max; use subgradients or a softmax approximation.
+          </div>
+          <aside class="notes">
+            <ul>
+              <li>Max selects the best-matching patch: yields localization for free (argmax location).</li>
+              <li>Non-smoothness is fine; training uses subgradient (choose argmax).</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Softmax (log-sum-exp) smoothing</h1>
+          <center>
+            $$
+            s_k^\tau(x)= -\tau \log\sum_{i,j}\exp\Big(-\tfrac{1}{\tau}\|z_{ij}(x)-p_k\|^2\Big)
+            $$
+          </center>
+          <div class="affirmation">
+            As $\tau\to 0$, $s_k^\tau(x)\to \max_{i,j} -\|z_{ij}-p_k\|^2$.
+          </div>
+          <aside class="notes">
+            <ul>
+              <li>Classic log-sum-exp approximation: stable gradients, avoids argmax jumps.</li>
+              <li>You can mention: temperature controls “softness” of localization.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Objective: accuracy + interpretability</h1>
+          <center>
+            $$
+            \mathcal{L}=\mathcal{L}_{cls}+\lambda_1\mathcal{L}_{p2d}+\lambda_2\mathcal{L}_{d2p}
+            $$
+          </center>
+          <ul>
+            <li>$\mathcal{L}_{cls}$: cross-entropy on logits</li>
+            <li>$\mathcal{L}_{p2d}$: each prototype close to at least one real patch (same class)</li>
+            <li>$\mathcal{L}_{d2p}$: each sample covered by at least one prototype (same class)</li>
+          </ul>
+          <aside class="notes">
+            <ul>
+              <li>p2d prevents “phantom” prototypes; d2p avoids unused prototypes.</li>
+              <li>Min over dataset/patches makes it non-smooth but manageable (batch approximations).</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Prototype-to-data term (patch version)</h1>
+          <center>
+            $$
+            \mathcal{L}_{p2d}=\sum_{k=1}^K \min_{x_i:y_i=c(k)} \min_{i,j}\; \|z_{ij}(x_i)-p_k\|_2^2
+            $$
+          </center>
+          <div class="remarque">
+            Makes each prototype represent a real pattern from the training data.
+          </div>
+          <aside class="notes">
+            <ul>
+              <li>In practice: approximate mins via nearest patch found during training.</li>
+              <li>Keep the “same class” constraint to avoid prototypes drifting to other classes.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Data-to-prototype term</h1>
+          <center>
+            $$
+            \mathcal{L}_{d2p}=\mathbb{E}\Big[\min_{k:c(k)=y}\min_{i,j}\|z_{ij}(x)-p_k\|_2^2\Big]
+            $$
+          </center>
+          <aside class="notes">
+            <ul>
+              <li>This avoids prototypes that never explain any sample (coverage).</li>
+              <li>Interpretation: each sample should be “near” some prototype of its class.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h1>Prototype projection (key XAI step)</h1>
+          <center>
+            $$
+            (x^\star,i^\star,j^\star)=\arg\min_{x_i:y_i=c(k)}\min_{i,j}\|z_{ij}(x_i)-p_k\|^2
+            $$
+            $$
+            p_k \leftarrow z_{i^\star j^\star}(x^\star)
+            $$
+          </center>
+          <div class="affirmation">
+            Prototypes become <b>exact</b> training patches, hence directly visualizable.
+          </div>
+          <aside class="notes">
+            <ul>
+              <li>After projection, you can display the corresponding image patch as “this is the prototype”.</li>
+              <li>Easy proposition: this cannot increase the p2d nearest distance (argmin).</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- V -->
+        <section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+          <h2 id="coverh2">V — Prototypical and Counterfactual ? </h2>
+        </section>
+
+        <section>
+          <h1>Prototype-driven counterfactual (idea)</h1>
+          <ul>
+            <li>Target class $y'$ has prototypes $\{p_k:c(k)=y'\}$.</li>
+            <li>Seek $c$ close to $x$ but near a target prototype:</li>
+          </ul>
+          <center>
+            $$
+            \min_c \|c-x\|
+            \quad\text{s.t.}\quad
+            \exists k:c(k)=y'\;\; \|\phi(c)-p_k\|\le \epsilon
+            $$
+          </center>
+          <aside class="notes">
+            <ul>
+              <li>Interpretation: recourse as moving toward a “typical” pattern of the target class.</li>
+              <li>This is a nice bridge to your counterfactual lecture.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <!-- ========================================================= -->
+<!-- APNet (Zinemanas et al., Electronics 2021) -->
+<!-- ========================================================= -->
+
+<section class="cover" data-background="figures/background.png" data-state="no-title-footer no-progressbar has-dark-background">
+  <h2 id="coverh2">Proto-based Interpretability for Audio: APNet <span style="font-family:monospace;">[Zin. 21]</span></h2>
+  <aside class="notes">
+    <ul>
+      <li>We now switch from “prototype nets for images” to an audio-native prototype architecture.</li>
+      <li>Goal: explanations that are not post-hoc saliency maps, but part of the model’s reasoning.</li>
+      <li>Paper: Zinemanas et al., Electronics 2021 (APNet).</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>What APNet tries to fix (audio XAI)</h1>
+  <ul>
+    <li>Deep audio classifiers are accurate but opaque.</li>
+    <li>Post-hoc saliency (gradients / LRP / etc.) can be unstable or hard to interpret in TF.</li>
+    <li><b>APNet</b>: explanation is <b>case-based</b>:
+      prediction is based on similarity to a <b>small set of learned prototypes</b>.</li>
+  </ul>
+
+  <div class="affirmation">
+    Interpretability is intrinsic: the decision is explicitly computed from prototype similarities.
+  </div>
+
+  <aside class="notes">
+    <ul>
+      <li>Key angle: “explain like a human”: show representative prototype(s) and how close you are to them.</li>
+      <li>In audio, prototypes can be visualized (mel-spectrogram) and even listened to (via inversion).</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Architecture at a glance</h1>
+  <ul>
+    <li>Input: log-mel spectrogram $X_i \in \mathbb{R}^{T\times F}$</li>
+    <li>Encoder: $Z_i = f(X_i)$ with $Z_i \in \mathbb{R}^{T'\times F'\times C}$</li>
+    <li>Prototype layer: store $M$ prototypes $P_j \in \mathbb{R}^{T'\times F'\times C}$</li>
+    <li>Similarity $\rightarrow$ weighted sum over frequency $\rightarrow$ linear classifier</li>
+  </ul>
+  <center>
+  <img src="figures/images/proto5.png" width="60%">
+</center>
+  <aside class="notes">
+    <ul>
+      <li>The model is basically: autoencoder for latent space + prototype classifier on top.</li>
+      <li>Important: prototypes live in latent space, but can be decoded back to mel and audio.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Autoencoder objective (makes prototypes audible)</h1>
+  <ul>
+    <li>Decoder reconstructs $\hat X_i = g(Z_i)$</li>
+    <li>Reconstruction loss:</li>
+  </ul>
+  <center>
+    $$\ell_r=\frac{1}{N}\sum_{i=1}^N \|X_i-\hat X_i\|_2^2$$
+  </center>
+
+  <img src="figures/images/proto6.png" widht="50%">
+  <aside class="notes">
+    <ul>
+      <li>This is crucial: if reconstruction is garbage, decoded prototypes will be meaningless.</li>
+      <li>They use pooling indices/masks (SegNet-like trick) to make decoding workable after max-pool.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Prototype loss = “prototypes are real” + “data are covered”</h1>
+  <ul>
+    <li>Distance from each sample to each prototype (latent space):</li>
+  </ul>
+  <center>
+    $$D_{ij}=\|Z_i-P_j\|_2^2$$
+  </center>
+  <ul>
+    <li>Prototype objective:</li>
+  </ul>
+  <center>
+    $$\ell_p=\frac{1}{N}\sum_{i=1}^N\min_j D_{ij} \;+\; \frac{1}{M}\sum_{j=1}^M\min_i D_{ij}$$
+  </center>
+
+  <aside class="notes">
+    <ul>
+      <li>First term = each training example is close to at least one prototype (“coverage”).</li>
+      <li>Second term = each prototype is close to at least one training example (“no fake prototype drifting off-manifold”).</li>
+      <li>So: prototypes become representative and usable for explanation.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Audio-specific twist: frequency-dependent similarity</h1>
+  <ul>
+    <li>They compute similarity per frequency bin $f$ (latent TF structure):</li>
+  </ul>
+  <center>
+    $$S_{ij}[f]=\exp\!\left(-\sum_{t=1}^{T'}\sum_{c=1}^{C}\big(Z_i[t,f,c]-P_j[t,f,c]\big)^2\right)$$
+  </center>
+  <ul>
+    <li>Then aggregate frequency with a <b>learnable</b> kernel $H_j[f]$:</li>
+  </ul>
+  <center>
+    $$\hat S_{ij}=\sum_{f=1}^{F'} H_j[f]\,S_{ij}[f]$$
+  </center>
+
+ <img src="figures/images/proto8.png" widht="50%">
+
+  <aside class="notes">
+    <ul>
+      <li>Unlike images, frequency has semantics: low vs high band matters.</li>
+      <li>$H_j[f]$ learns which frequency regions matter for prototype j.</li>
+      <li>Interpretability bonus: you can “see” what band the prototype cares about.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Classifier + training objective</h1>
+  <ul>
+    <li>Linear layer on similarities (no bias for interpretability):</li>
+  </ul>
+  <center>
+    $$\hat Y = \mathrm{softmax}(\hat S\,W)$$
+  </center>
+  <ul>
+    <li>Cross-entropy:</li>
+  </ul>
+  <center>
+    $$\ell_c=-\frac{1}{N}\sum_{i=1}^N\sum_{k=1}^K Y_{ik}\log \hat Y_{ik}$$
+  </center>
+  <ul>
+    <li>Final loss:</li>
+  </ul>
+  <center>
+    $$\ell=\alpha \ell_c + \beta \ell_p + \gamma \ell_r$$
+  </center>
+
+  <aside class="notes">
+    <ul>
+      <li>$\ell_c$ = accuracy, $\ell_p$ = prototype meaningfulness, $\ell_r$ = decodability.</li>
+      <li>Interpretability is enforced by construction + objectives, not after training.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Datasets (3 tasks)</h1>
+  <ul>
+    <li><b>UrbanSound8K</b>: 10 urban classes (≤4s clips).</li>
+    <li><b>Medley-solos-DB</b>: 9 instruments, 3s clips .</li>
+    <li><b>Google Speech Commands V2</b>: 35 keywords, 1s clips.</li>
+  </ul>
+
+  <aside class="notes">
+    <ul>
+      <li>Nice didactic point: speech/music/environmental = very different audio “natures”.</li>
+      <li>So if interpretability works across all three, it’s more convincing.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Results</h1>
+  <ul>
+    <li>They compare to SB-CNN, Att-CRNN, and OpenL3 features + MLP.</li>
+    <li>APNet is competitive on all tasks.</li>
+  </ul>
+
+ <img src="figures/images/proto9.png">
+
+  <aside class="notes">
+    <ul>
+      <li>Key message: interpretability does not necessarily kill accuracy.</li>
+      <li>Also mention model size: APNet is not huge compared to OpenL3 pipeline.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Inspection: what makes it interpretable? (1/2)</h1>
+  <ul>
+    <li>Decode prototypes $\to$ mel-spectrograms (and audio) to inspect “what a class looks like”.</li>
+  </ul>
+  <center>
+      <img src="figures/images/proto10.png">
+  </center>
+
+      <aside class="notes">
+    <ul>
+      <li>Fig.8 is a great story: mean aggregation fails, learned weighted sum finds the correct “background” siren.</li>
+      <li>This is a rare paper where you can literally show “the model’s reasoning chain”.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Inspection: what makes it interpretable? (2/2)</h1>
+  <ul>    
+    <li>Inspect $W$ (prototype-to-class connections): prototypes mostly connect to their own class.</li>
+  </ul>
+
+   <center>
+      <img src="figures/images/proto11.png">
+  </center>
+  <aside class="notes">
+    <ul>
+      <li>Fig.8 is a great story: mean aggregation fails, learned weighted sum finds the correct “background” siren.</li>
+      <li>This is a rare paper where you can literally show “the model’s reasoning chain”.</li>
+    </ul>
+  </aside>
+</section>
+
+<section>
+  <h1>Refinement (because you can debug it)</h1>
+  <ul>
+    <li><b>Prototype redundancy pruning</b> using prototype-prototype distances.</li>
+    <li><b>Channel redundancy pruning</b> by analyzing prototype distances per channel.</li>
+    <li>After pruning + short retrain: fewer params and sometimes better accuracy.</li>
+  </ul>
+  <center>
+  <img src="figures/images/proto12.png">
+</center>
+  <aside class="notes">
+    <ul>
+      <li>Interpretability is also a tool for model improvement (not just “pretty explanations”).</li>
+      <li>“if you can see it, you can fix it”.</li>
+    </ul>
+  </aside>
+</section>
+<section>
+  <h1>Interested by it ? Then select his extension for the project :-)</h1>
+  <img src="figures/images/proto13.png">
+</section>
+<section>
+  <h1>Take-home (APNet)</h1>
+  <ol>
+    <li>Prototype networks give <b>intrinsic</b> explanations: “this sounds like that”.</li>
+    <li>Audio needs domain-aware similarity (frequency matters).</li>
+    <li>Decoding prototypes to audio makes explanations tangible (listen + view).</li>
+    <li>Interpretable structure enables pruning + debugging beyond accuracy.</li>
+  </ol>
+
+  <aside class="notes">
+    <ul>
+      <li>Bridge to your next lecture: ProtoPNet patch-based for images; audio analogue is TF-local prototypes.</li>
+      <li>Also connect to counterfactuals: prototypes give “nearest explanation”, counterfactuals give “minimal change”.</li>
+    </ul>
+  </aside>
+</section>
+
+
+
+
 
 
 </div>
 				<!-- Footer (keep inside .slides) -->
 				<div class="footer">
 					<img src="css/theme/img/logo-Telecom.svg" alt="Logo"/>
-					<div id="middlebox">Variance-Based / Counterfactual / Prototype  - APM_5MV75_TP</div>
+					<div id="middlebox">Variance-Based / Counterfactual / Prototypical  - APM_5MV75_TP</div>
 				</div>
 
 			</div> <!-- end .slides -->
